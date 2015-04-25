@@ -1,9 +1,7 @@
 
-    error_def
+## error_def: A Rust syntax extensions for generating error-handling boilerplate code.
 
-# A Rust syntax extensions for generating error-handling boilerplate code.
-
-*Simple Example:* The following code
+**Simple Example:** The following code
 
 ```
 error_def! ExampleError {
