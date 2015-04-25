@@ -1,7 +1,7 @@
 
 ## error_def: A Rust syntax extension for generating error-handling boilerplate code.
 
-**Quick Example:** The following code
+**Quick Example:** The following code:
 
 ```rust
 error_def! ExampleError {
@@ -10,19 +10,19 @@ error_def! ExampleError {
   AVariantWithArgs {
     flim: u32,
     flam: u32,
-  }                     => "Variant with args" ("This is a format string. flim is {}. flam is {}.", flim, flam),
+  } => "Variant with args" ("This is a format string. flim is {}. flam is {}.", flim, flam),
   AVariantWithACause {
     blah: bool,
     #[from] cause: io::Error,
-  }                     => "Variant with a cause" ("self.cause() would return Some({})", cause)
+  } => "Variant with a cause" ("self.cause() would return Some({})", cause)
   AVariantWithJustACause {
     #[from] blah: io::Error,
-  }                     => "This variant can be made `From` an `io::Error`"
+  } => "This variant can be made `From` an `io::Error`"
 }
 
 ```
 
-Expands (rougly) to:
+Expands (roughly) to:
 
 ```rust
 enum ExampleError {
@@ -75,7 +75,7 @@ impl fmt::Display for ExampleError {
         try!(write!(f, "self.cause() would return Some({})", cause));
         Ok(())
       },
-      &ExampleError::AVariantWithJustACause { .. }                       => {
+      &ExampleError::AVariantWithJustACause { .. }           => {
         try!(write!(f, "This variant can be made `From` an `io::Error`"));
         Ok(())
       },
