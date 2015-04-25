@@ -1,9 +1,9 @@
 
-## error_def: A Rust syntax extensions for generating error-handling boilerplate code.
+## error_def: A Rust syntax extension for generating error-handling boilerplate code.
 
-**Simple Example:** The following code
+**Quick Example:** The following code
 
-```
+```rust
 error_def! ExampleError {
   AVariant                     => "Unit-like variant",
   AVariantWithALongDescription => "Unit-like variant" ("A more verbose description"),
@@ -22,9 +22,9 @@ error_def! ExampleError {
 
 ```
 
-expands (rougly) to:
+Expands (rougly) to:
 
-```
+```rust
 enum ExampleError {
   AVariant,
   AVariantWithALongDescription,
@@ -113,4 +113,8 @@ impl From<io::Error> for ExampleError {
 
 ```
 
+**Explanation:** The `error_def` macro defines an enum and creates `impl`s for `std::error::Error`,
+`std::fmt::Debug` and `std::fmt::Display`. If a struct variant member is marked with the `#[from]`
+pseudo-attribute it will be returned by `Error::cause`. If a struct variant has only one member and
+it is marked `#[from]` then `std::convert::From` will be implemented accordingly.
 
