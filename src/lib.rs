@@ -278,8 +278,16 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
         span: DUMMY_SP,
         node: Ty_::TyPath(None, Path {
           span: DUMMY_SP,
-          global: false,
+          global: true,
           segments: vec![
+            PathSegment {
+              identifier: ast::Ident::new(intern("std")),
+              parameters: PathParameters::none(),
+            },
+            PathSegment {
+              identifier: ast::Ident::new(intern("result")),
+              parameters: PathParameters::none(),
+            },
             PathSegment {
               identifier: ast::Ident::new(intern("Result")),
               parameters: PathParameters::AngleBracketedParameters(AngleBracketedParameterData {
