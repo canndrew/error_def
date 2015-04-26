@@ -8,7 +8,7 @@ homepage = "https://github.com/canndrew/error_def"
 repository = "https://github.com/canndrew/error_def"
 readme = "README.md"
 keywords = ["error", "boilerplate", "syntax"]
-license-file = "LICENSE"
+license = "GPL-2.0"
 
 [lib]
 name = "error_def"

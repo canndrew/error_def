@@ -5,19 +5,16 @@
 
 ```rust
 error_def! ExampleError {
-  AVariant                     => "Unit-like variant",
-  AVariantWithALongDescription => "Unit-like variant" ("A more verbose description"),
-  AVariantWithArgs {
-    flim: u32,
-    flam: u32,
-  } => "Variant with args" ("This is a format string. flim is {}. flam is {}.", flim, flam),
-  AVariantWithACause {
-    blah: bool,
-    #[from] cause: io::Error,
-  } => "Variant with a cause" ("self.cause() would return Some({})", cause)
-  AVariantWithJustACause {
-    #[from] blah: io::Error,
-  } => "This variant can be made `From` an `io::Error`"
+  AVariant
+    => "Unit-like variant",
+  AVariantWithALongDescription
+    => "Unit-like variant" ("A more verbose description"),
+  AVariantWithArgs { flim: u32, flam: u32 }
+    => "Variant with args" ("This is a format string. flim is {}. flam is {}.", flim, flam),
+  AVariantWithACause { blah: bool, #[from] cause: io::Error }
+    => "Variant with a cause" ("self.cause() would return Some({})", cause)
+  AVariantWithJustACause { #[from] blah: io::Error }
+    => "This variant can be made `From` an `io::Error`"
 }
 
 ```
@@ -44,11 +41,16 @@ enum ExampleError {
 impl fmt::Debug for ExampleError {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result<(), fmt::Error> {
     match self {
-      &ExampleError::AVariant                                   => write!(f, "AVariant /* {} */", self),
-      &ExampleError::AVariantWithALongDescription               => write!(f, "AVariantWithALongDescription /* {} */", self),
-      &ExampleError::AVariantWithArgs { ref flim, ref flam }    => write!(f, "AVariantWithArgs {{ flim: {:?}, flam: {:?} }} /* {} */", flim, flim, self),
-      &ExampleError::AVariantWithACause { ref blah, ref cause } => write!(f, "AVariantWithACause {{ blah: {:?}, cause: {:?} }} /* {} */", blah, cause, self),
-      &ExampleError::AVariantWithJustACause { ref blah }        => write!(f, "AVariantWithJustACause {{ blah: {:?} }} /* {} */", blah, self),
+      &ExampleError::AVariant
+        => write!(f, "AVariant /* {} */", self),
+      &ExampleError::AVariantWithALongDescription
+        => write!(f, "AVariantWithALongDescription /* {} */", self),
+      &ExampleError::AVariantWithArgs { ref flim, ref flam }
+        => write!(f, "AVariantWithArgs {{ flim: {:?}, flam: {:?} }} /* {} */", flim, flim, self),
+      &ExampleError::AVariantWithACause { ref blah, ref cause }
+        => write!(f, "AVariantWithACause {{ blah: {:?}, cause: {:?} }} /* {} */", blah, cause, self),
+      &ExampleError::AVariantWithJustACause { ref blah }
+        => write!(f, "AVariantWithJustACause {{ blah: {:?} }} /* {} */", blah, self),
     }
   }
 }
