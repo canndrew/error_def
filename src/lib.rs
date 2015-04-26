@@ -198,7 +198,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
         },
         id:        DUMMY_NODE_ID,
         disr_expr: None,
-        vis:       Visibility::Public,
+        vis:       Visibility::Inherited,
       })),
       short_description: short_desc,
       from_idx: from_idx,
@@ -217,7 +217,19 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
 
   let vars = variants.iter().map(|v| v.variant.clone()).collect();
 
-  items.push(cx.item_enum(sp, type_name, EnumDef { variants: vars }));
+  items.push(P(Item {
+    ident: type_name,
+    attrs: Vec::new(),
+    id:    DUMMY_NODE_ID,
+    node:  Item_::ItemEnum(
+      EnumDef {
+        variants: vars,
+      },
+      ast_util::empty_generics()
+    ),
+    vis:   Visibility::Public,
+    span:  DUMMY_SP,
+  }));
 
   let str_type = P(Ty {
     id: DUMMY_NODE_ID,
