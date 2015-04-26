@@ -2,6 +2,14 @@
 name = "error_def"
 version = "0.1.0"
 authors = ["Andrew Cann <shum@canndrew.org>"]
+description = "A Rust syntax extension for generating error-handling boilerplate code."
+documentation = "https://github.com/canndrew/error_def"
+homepage = "https://github.com/canndrew/error_def"
+repository = "https://github.com/canndrew/error_def"
+readme = "README.md"
+keywords = ["error", "boilerplate", "syntax"]
+license = "GPL-2.0"
+license-file = "LICENSE"
 
 [lib]
 name = "error_def"
