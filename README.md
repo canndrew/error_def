@@ -23,16 +23,25 @@ Expands (roughly) to:
 
 ```rust
 enum ExampleError {
+  /// Unit-like variant
   AVariant,
+
+  /// Unit-like variant
   AVariantWithALongDescription,
+
+  /// Variant with args
   AVariantWithArgs {
     flim: u32,
     flam: u32,
   },
+
+  /// Variant with a cause
   AVariantWithACause {
     blah: bool,
     cause: io::Error,
   },
+
+  /// This variant can be made `From` an `io::Error`
   AVariantWithJustACause {
     blah: io::Error,
   },
