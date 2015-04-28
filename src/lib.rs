@@ -25,7 +25,7 @@ use syntax::ast::{Variant_, Visibility, VariantKind, Variant, Attribute_, AttrSt
 use syntax::abi::Abi;
 use syntax::ptr::P;
 use syntax::attr::{mk_sugared_doc_attr, mk_attr_id};
-use syntax::ext::quote::rt::{ToSource, ToTokens};
+use syntax::ext::quote::rt::ToTokens;
 use syntax::ast_util;
 use syntax::owned_slice::OwnedSlice;
 
@@ -80,13 +80,15 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
           let mut attrs = parser.parse_outer_attributes();
           let mut from_attr_idx: Option<usize> = None;
           for (i, attr) in attrs.iter().enumerate() {
-            if attr.node.to_source() == "#[from]" {
-              match from_attr_idx {
-                Some(_) => {
-                  let _ = parser.fatal("Field marked #[from] twice");
-                  return DummyResult::any(sp);
-                },
-                None => from_attr_idx = Some(i),
+            if let MetaItem_::MetaWord(ref attr_name) = attr.node.value.node {
+              if *attr_name == "from" {
+                match from_attr_idx {
+                  Some(_) => {
+                    let _ = parser.fatal("Field marked #[from] twice");
+                    return DummyResult::any(sp);
+                  },
+                  None => from_attr_idx = Some(i),
+                };
               };
             };
           };
