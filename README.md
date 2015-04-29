@@ -125,7 +125,7 @@ impl From<io::Error> for ExampleError {
 ```
 
 **Explanation:** `error_def` defines an `enum` where each variant is paired
-with a description of the variant
+with a description of the variant.
 
 ```rust
 error_def! SomeError {
@@ -165,11 +165,11 @@ error_def! SomeError {
 `fmt::Display` and `fmt::Debug`. In the above case, `SomeError::Io` would be
 formatted as
 
-`I/O error occured. Error: `*`io::Error displayed here`*
+`I/O error occured. Error: <`*`insert fmt::Display(cause) here`*`>`
 
 For `fmt::Display` and
 
-`SomeError::Io { cause: `*`io:Error Debug formatted here`*` } /* I/O error occured. Error: `*`io::Error displayed here`*` */`
+`SomeError::Io { cause: <`*`insert fmt::Debug(cause) here`*`> } /* I/O error occured. Error: <`*`insert fmt::Display(cause) here`*`> */`
 
 For `fmt::Debug`.
 
