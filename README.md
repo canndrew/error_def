@@ -124,8 +124,90 @@ impl From<io::Error> for ExampleError {
 
 ```
 
-**Explanation:** The `error_def` macro defines an enum and creates `impl`s for `std::error::Error`,
-`std::fmt::Debug` and `std::fmt::Display`. If a struct variant member is marked with the `#[from]`
-pseudo-attribute it will be returned by `Error::cause`. If a struct variant has only one member and
-it is marked `#[from]` then `std::convert::From` will be implemented accordingly.
+**Explanation:** `error_def` defines an `enum` where each variant is paired
+with a description of the variant
+
+```rust
+error_def! SomeError {
+  AVariant       => "A description",
+  AnotherVariant => "Another description",
+}
+```
+
+This description is added as a doc-comment to the variant and is returned by
+calls to `Error::description`.
+
+```rust
+assert!(SomeError::AVariant.description() == "A description")
+```
+
+Variants can be struct-like.
+
+```rust
+error_def! SomeError {
+  AVariant { an_i32: i32 }  => "I'm a variant",
+}
+```
+
+Variants can also have an optional long-description which consists of a format
+string and a sequence of arguments. The long description is placed in
+parenthesis after the short-description. If the variant is a struct, the
+arguments to the format string can refer to it's members.
+
+```rust
+error_def! SomeError {
+  Io { cause: io::Error }
+    => "I/O error occured!" ("Error: {}", cause),
+}
+```
+
+`error_def!` uses the short and long descriptions to provide `impl`s of
+`fmt::Debug` and `fmt::Display`. In the above case, `SomeError::Io` would be
+formatted as
+
+`"SomeError::Io { cause: `*`io:Error Debug formatted here`*` } /* I/O error occured. Error: `*`io::Error displayed here`*` */"`
+
+For `fmt::Debug` and
+
+`"I/O error occured. Error: `*`io::Error displayed here`*`"`
+
+For `fmt::Display`.
+
+Members of a struct-variant can be marked with an optional `#[from]` pseudo-attribute.
+
+```rust
+error_def! SomeError {
+  Io {
+    foo: u32,
+    #[from] cause: io::Error,
+  } => "Io error"
+}
+```
+
+This causes the member to be returned by calls to `Error::cause`. In the above
+example, calling `Error::cause` on a `SomeError::Io` will return an
+`Option<&Error>` where the `&Error` points to an `io::Error`.
+
+If a struct variant has only one member and it is marked `#[from]` then `From`
+will be implemented to cast the type of that member to the type of the error.
+
+For example, if we define an error like this:
+
+```rust 
+error_def! SomeError {
+  Io { #[from] cause: io::Error } => "I/O error",
+}
+```
+
+Then `error_def!` will define an `impl`:
+
+```rust
+impl std::convert::From<io::Error> for SomeError {
+  fn from(e: io::Error) -> SomeError {
+    SomeError::Io {
+      cause: e,
+    }
+  }
+}
+```
 
