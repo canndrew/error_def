@@ -22,7 +22,7 @@ error_def! ExampleError {
 Expands (roughly) to:
 
 ```rust
-enum ExampleError {
+pub enum ExampleError {
   /// Unit-like variant
   AVariant,
 
@@ -162,16 +162,16 @@ error_def! SomeError {
 ```
 
 `error_def!` uses the short and long descriptions to provide `impl`s of
-`fmt::Debug` and `fmt::Display`. In the above case, `SomeError::Io` would be
+`fmt::Display` and `fmt::Debug`. In the above case, `SomeError::Io` would be
 formatted as
 
-`"SomeError::Io { cause: `*`io:Error Debug formatted here`*` } /* I/O error occured. Error: `*`io::Error displayed here`*` */"`
+`I/O error occured. Error: `*`io::Error displayed here`*
 
-For `fmt::Debug` and
+For `fmt::Display` and
 
-`"I/O error occured. Error: `*`io::Error displayed here`*`"`
+`SomeError::Io { cause: `*`io:Error Debug formatted here`*` } /* I/O error occured. Error: `*`io::Error displayed here`*` */`
 
-For `fmt::Display`.
+For `fmt::Debug`.
 
 Members of a struct-variant can be marked with an optional `#[from]` pseudo-attribute.
 

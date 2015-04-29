@@ -46,12 +46,6 @@ struct VariantDef {
 }
 
 fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, tokens: Vec<TokenTree>) -> Box<MacResult + 'c> {
-  /*
-  let foo = format!("token tree: {:?}", tokens);
-  cx.span_err(sp, &foo[..]);
-  return DummyResult::any(sp);
-  */
-
   let mut parser = parse::tts_to_parser(cx.parse_sess(), tokens, cx.cfg());
 
   let mut items: Vec<P<ast::Item>> = Vec::new();
@@ -59,8 +53,16 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
 
   let syn_context = type_name.ctxt;
 
+  /*
+   * Step 0.
+   *
+   * Parse the token tree to populate our list of variants.
+   *
+   */
   loop {
     let var_lo = parser.span.lo;
+
+    // Get the name of this variant.
     let variant_name = match parser.bump_and_get() {
       Ok(Token::Eof)                             => break,
       Ok(Token::Ident(ident, IdentStyle::Plain)) => ident,
@@ -72,16 +74,26 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     let var_hi = parser.span.hi;
 
     let (from_idx, members): (Option<usize>, Vec<StructField>) = match parser.bump_and_get() {
+      // It's a unit-like variant. (ie. not a struct variant)
       Ok(Token::FatArrow) => (None, Vec::new()),
+
+      // It's a struct variant
       Ok(Token::OpenDelim(DelimToken::Brace)) => {
         let mut members: Vec<StructField> = Vec::new();
         let mut from_memb_idx: Option<usize> = None;
+
+        // Parse the list of struct members.
         loop {
+
+          // Parse the list of attributes on this struct member
           let mut attrs = parser.parse_outer_attributes();
+
+          // Find whether this member is marked #[from]. And if it is, find the index of the
+          // #[from] attribute so we can remove it.
           let mut from_attr_idx: Option<usize> = None;
           for (i, attr) in attrs.iter().enumerate() {
             if let MetaItem_::MetaWord(ref attr_name) = attr.node.value.node {
-              if *attr_name == "from" {
+              if *attr_name == "from" {   // We've found a #[from] attribute.
                 match from_attr_idx {
                   Some(_) => {
                     let _ = parser.fatal("Field marked #[from] twice");
@@ -93,6 +105,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
             };
           };
           match from_attr_idx {
+            // This member is marked #[from]. Record this.
             Some(i) => {
               attrs.swap_remove(i);
               match from_memb_idx {
@@ -106,6 +119,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
             None    => (),
           };
 
+          // Parse the name and type of the member.
           let sf = match parser.parse_single_struct_field(Visibility::Public, attrs) {
             Ok(sf)  => sf,
             Err(_)  => {
@@ -143,6 +157,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       },
     };
 
+    // Parse the short description.
     let short_desc = match parser.bump_and_get() {
       Ok(Token::Literal(Lit::Str_(sd), None)) => sd,
       _ => {
@@ -151,6 +166,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       },
     };
 
+    // Parse the long description if it exists.
     let long_desc = if parser.token == Token::OpenDelim(DelimToken::Paren) {
       let _ = parser.bump();
 
@@ -184,9 +200,11 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       None
     };
 
+
     let comment_str = format!("/// {}.", short_desc);
     let comment = get_name(intern(&comment_str[..]));
 
+    // Build our variant definition out of the information we've parsed.
     variants.push(VariantDef {
       variant: P(spanned(var_lo, var_hi, Variant_ {
         name:      variant_name,
@@ -217,8 +235,15 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     }
   };
 
+  /*
+   * Step 1.
+   *
+   * Now that we have parsed the code, build an AST out of it. 
+   *
+   */
   let vars = variants.iter().map(|v| v.variant.clone()).collect();
 
+  // Create our enum item.
   items.push(P(Item {
     ident: type_name,
     attrs: Vec::new(),
@@ -233,6 +258,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     span:  DUMMY_SP,
   }));
 
+  // Create an AST for the &str type to use later.
   let str_type = P(Ty {
     id: DUMMY_NODE_ID,
     node: Ty_::TyRptr(None, MutTy {
@@ -246,6 +272,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     span: DUMMY_SP,
   });
 
+  // Create an AST for the #[allow(unused_variables)] attr to be used later.
   let unused_attr = dummy_spanned(Attribute_ {
     id: mk_attr_id(),
     style: AttrStyle::AttrOuter,
@@ -256,6 +283,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     is_sugared_doc: false,
   });
 
+  // Create an AST of the method signature of fmt::Display::fmt and fmt::Debug::fmt.
   let fmt_meth_sig = MethodSig {
     unsafety: Unsafety::Normal,
     abi:      Abi::Rust,
@@ -334,6 +362,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     explicit_self: dummy_spanned(ExplicitSelf_::SelfRegion(None, Mutability::MutImmutable, ast::Ident::new(intern("what_is_this")))),
   };
 
+  // Our actual code block for Debug::fmt.
   let debug_fmt_block = mk_match_block(&variants, type_name, |v| P(Expr {
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
@@ -437,6 +466,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     })),
   }));
 
+  // The AST for the method implementation of Debug::fmt
   let debug_fmt_impl = P(ImplItem {
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
@@ -446,6 +476,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     node:  ImplItem_::MethodImplItem(fmt_meth_sig.clone(), debug_fmt_block),
   });
 
+  // The code for Display::fmt
   let display_fmt_block = mk_match_block(&variants, type_name, |v| P(Expr {
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
@@ -543,6 +574,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     })),
   }));
 
+  // The method impl for Display::fmt
   let display_fmt_impl = P(ImplItem {
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
@@ -552,6 +584,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     node:  ImplItem_::MethodImplItem(fmt_meth_sig, display_fmt_block),
   });
 
+  // AST of the method signature for Error::description
   let description_meth_sig = MethodSig {
     unsafety: Unsafety::Normal,
     abi:      Abi::Rust,
@@ -564,12 +597,14 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     explicit_self: dummy_spanned(ExplicitSelf_::SelfRegion(None, Mutability::MutImmutable, ast::Ident::new(intern("what_is_this")))),
   };
 
+  // The code for our Error::description implementation
   let description_block = mk_match_block(&variants, type_name, |v| P(Expr {
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
     node: Expr_::ExprLit(P(dummy_spanned(Lit_::LitStr(get_name(v.short_description), StrStyle::CookedStr)))),
   }));
 
+  // The method implementation of Error::description
   let description_impl = P(ImplItem {
     id:    DUMMY_NODE_ID,
     span:  DUMMY_SP,
@@ -579,6 +614,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     node:  ImplItem_::MethodImplItem(description_meth_sig, description_block),
   });
 
+  // AST of the type &Error
   let ref_error_ty = P(Ty {
     node: Ty_::TyRptr(None, MutTy {
       ty: P(Ty {
@@ -596,6 +632,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     span: DUMMY_SP,
   });
 
+  // AST of the method signature for Error::cause
   let cause_meth_sig = MethodSig {
     unsafety: Unsafety::Normal,
     abi:      Abi::Rust,
@@ -633,6 +670,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     explicit_self: dummy_spanned(ExplicitSelf_::SelfRegion(None, Mutability::MutImmutable, ast::Ident::new(intern("what_is_this")))),
   };
 
+  // Code for Error::cause
   let cause_block = mk_match_block(&variants, type_name, |v| P(Expr {
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
@@ -672,6 +710,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     },
   }));
 
+  // The method impl for Error::cause
   let cause_impl = P(ImplItem {
     id:    DUMMY_NODE_ID,
     span:  DUMMY_SP,
@@ -681,6 +720,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     node:  ImplItem_::MethodImplItem(cause_meth_sig, cause_block),
   });
 
+  // The AST of our implementation of fmt::Debug
   items.push(P(Item {
     ident: ast::Ident::new(intern("whats_this_then")),
     attrs: Vec::new(),
@@ -703,6 +743,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     span: DUMMY_SP,
   }));
 
+  // The AST of our implementation of fmt::Display
   items.push(P(Item {
     ident: ast::Ident::new(intern("whats_this_then")),
     attrs: Vec::new(),
@@ -725,6 +766,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     span: DUMMY_SP,
   }));
 
+  // The AST of our implementation of error::Error
   items.push(P(Item {
     ident: ast::Ident::new(intern("seriously_what_should_this_be")),
     attrs: Vec::new(),
@@ -748,6 +790,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     span: DUMMY_SP,
   }));
 
+  // Generate std::convert::From impls for each variant if required.
   for v in variants {
     if let VariantKind::StructVariantKind(ref sd) = v.variant.node.kind {
       if sd.fields.len() == 1 && v.from_idx == Some(0) {
@@ -860,6 +903,9 @@ pub fn plugin_registrar(reg: &mut Registry) {
   reg.register_syntax_extension(token::intern("error_def"), SyntaxExtension::IdentTT(Box::new(expand_error_def), None, false));
 }
 
+// helper method for generating a Path from a slice of idents
+//
+// eg. ["std", "convert", "From"] => std::convert::From
 fn path_from_segments(global: bool, segments: &[ast::Ident]) -> Path {
   Path {
     span:   DUMMY_SP,
@@ -871,6 +917,10 @@ fn path_from_segments(global: bool, segments: &[ast::Ident]) -> Path {
   }
 }
 
+// Debug::fmt, Display::fmt, Error::description and Error::cause are all based on a match block
+// that descrtructures our error and gets any struct variant members. This implements the common
+// code between them. It get's passed a closure that generates an expression from a variant
+// definition to use as the result of that variant's match arm.
 fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F) -> P<Block>
     where F: Fn(&VariantDef) -> P<Expr>
 {
