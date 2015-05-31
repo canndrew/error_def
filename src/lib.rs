@@ -21,7 +21,7 @@ use syntax::ast::{Variant_, Visibility, VariantKind, Variant, Attribute_, AttrSt
                   ExplicitSelf_, Block, Expr, Expr_, Arm, Pat, Pat_, MatchSource,
                   DUMMY_NODE_ID, BlockCheckMode, ImplItem_, Item, Item_, Path, PathSegment,
                   PathParameters, Arg, BindingMode, AngleBracketedParameterData, Delimited, Stmt_,
-                  Mac_, FieldPat, StructFieldKind, Field};
+                  Mac_, FieldPat, StructFieldKind, Field, Constness};
 use syntax::abi::Abi;
 use syntax::ptr::P;
 use syntax::attr::{mk_sugared_doc_attr, mk_attr_id};
@@ -285,10 +285,11 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
 
   // Create an AST of the method signature of fmt::Display::fmt and fmt::Debug::fmt.
   let fmt_meth_sig = MethodSig {
-    unsafety: Unsafety::Normal,
-    abi:      Abi::Rust,
-    decl:     P(FnDecl {
-      inputs: vec![
+    unsafety:  Unsafety::Normal,
+    constness: Constness::NotConst,
+    abi:       Abi::Rust,
+    decl:      P(FnDecl {
+      inputs:  vec![
         Arg::new_self(DUMMY_SP, Mutability::MutImmutable, special_idents::self_),
         Arg {
           ty: P(Ty {
@@ -586,9 +587,10 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
 
   // AST of the method signature for Error::description
   let description_meth_sig = MethodSig {
-    unsafety: Unsafety::Normal,
-    abi:      Abi::Rust,
-    decl:     P(FnDecl {
+    unsafety:  Unsafety::Normal,
+    constness: Constness::NotConst,
+    abi:       Abi::Rust,
+    decl:      P(FnDecl {
       inputs:   vec![Arg::new_self(DUMMY_SP, Mutability::MutImmutable, special_idents::self_)],
       output:   FunctionRetTy::Return(str_type),
       variadic: false,
@@ -634,9 +636,10 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
 
   // AST of the method signature for Error::cause
   let cause_meth_sig = MethodSig {
-    unsafety: Unsafety::Normal,
-    abi:      Abi::Rust,
-    decl:     P(FnDecl {
+    unsafety:  Unsafety::Normal,
+    constness: Constness::NotConst,
+    abi:       Abi::Rust,
+    decl:      P(FnDecl {
       inputs:   vec![Arg::new_self(DUMMY_SP, Mutability::MutImmutable, special_idents::self_)],
       output:   FunctionRetTy::Return(P(Ty {
         id:   DUMMY_NODE_ID,
@@ -797,6 +800,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
         let field = &sd.fields[0].node;
         let from_meth_sig = MethodSig {
           unsafety:      Unsafety::Normal,
+          constness:     Constness::NotConst,
           abi:           Abi::Rust,
           decl:          P(FnDecl {
             inputs: vec![Arg {
