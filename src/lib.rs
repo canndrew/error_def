@@ -1,5 +1,4 @@
 #![feature(plugin_registrar)]
-#![feature(collections)]
 #![feature(rustc_private)]
 
 extern crate syntax;
@@ -541,7 +540,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
                   for fa in long_desc.format_args.iter() {
                     write_args.push(TtToken(DUMMY_SP, Token::Comma));
                     let tt = fa.to_tokens(cx);
-                    write_args.push_all(&tt[..]);
+                    write_args.extend(tt);
                   };
                   write_args
                 },
