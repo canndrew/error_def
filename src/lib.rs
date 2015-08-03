@@ -9,7 +9,7 @@ use syntax::ast::{self, TokenTree, EnumDef};
 use syntax::ast::TokenTree::{TtToken, TtDelimited};
 use syntax::ext::base::{ExtCtxt, MacResult, DummyResult, SyntaxExtension, MacEager};
 use syntax::ext::build::AstBuilder;
-use syntax::parse::token::{self, IdentStyle, intern, Token, Lit, get_name, DelimToken,
+use syntax::parse::token::{self, IdentStyle, intern, Token, Lit, InternedString, DelimToken,
                            special_idents};
 use syntax::parse;
 use syntax::parse::attr::ParserAttr;
@@ -201,7 +201,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
 
 
     let comment_str = format!("/// {}.", short_desc);
-    let comment = get_name(intern(&comment_str[..]));
+    let comment = InternedString::new_from_name(intern(&comment_str[..]));
 
     // Build our variant definition out of the information we've parsed.
     variants.push(VariantDef {
@@ -276,8 +276,8 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     id: mk_attr_id(),
     style: AttrStyle::AttrOuter,
     value: P(dummy_spanned(MetaItem_::MetaList(
-      get_name(intern("allow")),
-      vec![P(dummy_spanned(MetaItem_::MetaWord(get_name(intern("unused_variables")))))]
+      InternedString::new_from_name(intern("allow")),
+      vec![P(dummy_spanned(MetaItem_::MetaWord(InternedString::new_from_name(intern("unused_variables")))))]
     ))),
     is_sugared_doc: false,
   });
@@ -602,7 +602,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
   let description_block = mk_match_block(&variants, type_name, |v| P(Expr {
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
-    node: Expr_::ExprLit(P(dummy_spanned(Lit_::LitStr(get_name(v.short_description), StrStyle::CookedStr)))),
+    node: Expr_::ExprLit(P(dummy_spanned(Lit_::LitStr(InternedString::new_from_name(v.short_description), StrStyle::CookedStr)))),
   }));
 
   // The method implementation of Error::description
