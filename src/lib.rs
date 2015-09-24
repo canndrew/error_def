@@ -217,7 +217,6 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
         },
         id:        DUMMY_NODE_ID,
         disr_expr: None,
-        vis:       Visibility::Inherited,
       })),
       short_description: short_desc,
       from_idx: from_idx,
@@ -256,6 +255,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     vis:   Visibility::Public,
     span:  DUMMY_SP,
   }));
+
 
   // Create an AST for the &str type to use later.
   let str_type = P(Ty {
@@ -388,33 +388,37 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
             P(dummy_spanned(Stmt_::StmtSemi(P(Expr {
               id:   DUMMY_NODE_ID,
               span: DUMMY_SP,
-              node: Expr_::ExprMac(dummy_spanned(Mac_::MacInvocTT(path_from_segments(false, &[ast::Ident::new(intern("try"))]), vec![
-                TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("write")), IdentStyle::Plain)),
-                TtToken(DUMMY_SP, Token::Not),
-                TtDelimited(DUMMY_SP, Rc::new(Delimited {
-                  delim: DelimToken::Paren,
-                  open_span:  DUMMY_SP,
-                  close_span: DUMMY_SP,
-                  tts: {
-                    let mut tts = vec![
-                      TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("f")), IdentStyle::Plain)),
-                      TtToken(DUMMY_SP, Token::Comma),
-                      TtToken(DUMMY_SP, Token::Literal(Lit::Str_(intern(&ss[..])), None)),
-                    ];
-                    for f in fields.iter() {
-                      tts.push(TtToken(DUMMY_SP, Token::Comma));
-                      let field_name = match f.node.kind {
-                        StructFieldKind::NamedField(ident, _)  => ident,
-                        _                                      => unreachable!(),
+              node: Expr_::ExprMac(dummy_spanned(Mac_ {
+                path: path_from_segments(false, &[ast::Ident::new(intern("try"))]),
+                tts:  vec![
+                  TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("write")), IdentStyle::Plain)),
+                  TtToken(DUMMY_SP, Token::Not),
+                  TtDelimited(DUMMY_SP, Rc::new(Delimited {
+                    delim: DelimToken::Paren,
+                    open_span:  DUMMY_SP,
+                    close_span: DUMMY_SP,
+                    tts: {
+                      let mut tts = vec![
+                        TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("f")), IdentStyle::Plain)),
+                        TtToken(DUMMY_SP, Token::Comma),
+                        TtToken(DUMMY_SP, Token::Literal(Lit::Str_(intern(&ss[..])), None)),
+                      ];
+                      for f in fields.iter() {
+                        tts.push(TtToken(DUMMY_SP, Token::Comma));
+                        let field_name = match f.node.kind {
+                          StructFieldKind::NamedField(ident, _)  => ident,
+                          _                                      => unreachable!(),
+                        };
+                        tts.push(TtToken(DUMMY_SP, Token::Ident(field_name, IdentStyle::Plain)));
                       };
-                      tts.push(TtToken(DUMMY_SP, Token::Ident(field_name, IdentStyle::Plain)));
-                    };
-                    tts.push(TtToken(DUMMY_SP, Token::Comma));
-                    tts.push(TtToken(DUMMY_SP, Token::Ident(special_idents::self_, IdentStyle::Plain)));
-                    tts
-                  },
-                })),
-              ], syn_context))),
+                      tts.push(TtToken(DUMMY_SP, Token::Comma));
+                      tts.push(TtToken(DUMMY_SP, Token::Ident(special_idents::self_, IdentStyle::Plain)));
+                      tts
+                    },
+                  })),
+                ],
+                ctxt: syn_context
+              })),
             }), DUMMY_NODE_ID)))
           },
           VariantKind::TupleVariantKind(_) => {
@@ -422,22 +426,26 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
             P(dummy_spanned(Stmt_::StmtSemi(P(Expr {
               id:   DUMMY_NODE_ID,
               span: DUMMY_SP,
-              node: Expr_::ExprMac(dummy_spanned(Mac_::MacInvocTT(path_from_segments(false, &[ast::Ident::new(intern("try"))]), vec![
-                TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("write")), IdentStyle::Plain)),
-                TtToken(DUMMY_SP, Token::Not),
-                TtDelimited(DUMMY_SP, Rc::new(Delimited {
-                  delim: DelimToken::Paren,
-                  open_span:  DUMMY_SP,
-                  close_span: DUMMY_SP,
-                  tts: vec![
-                    TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("f")), IdentStyle::Plain)),
-                    TtToken(DUMMY_SP, Token::Comma),
-                    TtToken(DUMMY_SP, Token::Literal(Lit::Str_(intern(&ss[..])), None)),
-                    TtToken(DUMMY_SP, Token::Comma),
-                    TtToken(DUMMY_SP, Token::Ident(special_idents::self_, IdentStyle::Plain)),
-                  ],
-                })),
-              ], syn_context))),
+              node: Expr_::ExprMac(dummy_spanned(Mac_ {
+                path: path_from_segments(false, &[ast::Ident::new(intern("try"))]),
+                tts: vec![
+                  TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("write")), IdentStyle::Plain)),
+                  TtToken(DUMMY_SP, Token::Not),
+                  TtDelimited(DUMMY_SP, Rc::new(Delimited {
+                    delim: DelimToken::Paren,
+                    open_span:  DUMMY_SP,
+                    close_span: DUMMY_SP,
+                    tts: vec![
+                      TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("f")), IdentStyle::Plain)),
+                      TtToken(DUMMY_SP, Token::Comma),
+                      TtToken(DUMMY_SP, Token::Literal(Lit::Str_(intern(&ss[..])), None)),
+                      TtToken(DUMMY_SP, Token::Comma),
+                      TtToken(DUMMY_SP, Token::Ident(special_idents::self_, IdentStyle::Plain)),
+                    ],
+                  })),
+                ],
+                ctxt: syn_context
+              })),
             }), DUMMY_NODE_ID)))
           }
         }
@@ -486,66 +494,78 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
           P(dummy_spanned(Stmt_::StmtSemi(P(Expr {
             id:   DUMMY_NODE_ID,
             span: DUMMY_SP,
-            node: Expr_::ExprMac(dummy_spanned(Mac_::MacInvocTT(path_from_segments(false, &[ast::Ident::new(intern("try"))]), vec![
-              TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("write")), IdentStyle::Plain)),
-              TtToken(DUMMY_SP, Token::Not),
-              TtDelimited(DUMMY_SP, Rc::new(Delimited {
-                delim: DelimToken::Paren,
-                open_span:  DUMMY_SP,
-                close_span: DUMMY_SP,
-                tts: vec![
-                  TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("f")), IdentStyle::Plain)),
-                  TtToken(DUMMY_SP, Token::Comma),
-                  TtToken(DUMMY_SP, Token::Literal(Lit::Str_(v.short_description), None)),
-                ],
-              })),
-            ], syn_context))),
+            node: Expr_::ExprMac(dummy_spanned(Mac_ {
+              path: path_from_segments(false, &[ast::Ident::new(intern("try"))]),
+              tts: vec![
+                TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("write")), IdentStyle::Plain)),
+                TtToken(DUMMY_SP, Token::Not),
+                TtDelimited(DUMMY_SP, Rc::new(Delimited {
+                  delim: DelimToken::Paren,
+                  open_span:  DUMMY_SP,
+                  close_span: DUMMY_SP,
+                  tts: vec![
+                    TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("f")), IdentStyle::Plain)),
+                    TtToken(DUMMY_SP, Token::Comma),
+                    TtToken(DUMMY_SP, Token::Literal(Lit::Str_(v.short_description), None)),
+                  ],
+                })),
+              ],
+              ctxt: syn_context
+            })),
           }), DUMMY_NODE_ID))),
           P(dummy_spanned(Stmt_::StmtSemi(P(Expr {
             id:   DUMMY_NODE_ID,
             span: DUMMY_SP,
-            node: Expr_::ExprMac(dummy_spanned(Mac_::MacInvocTT(path_from_segments(false, &[ast::Ident::new(intern("try"))]), vec![
-              TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("write")), IdentStyle::Plain)),
-              TtToken(DUMMY_SP, Token::Not),
-              TtDelimited(DUMMY_SP, Rc::new(Delimited {
-                delim: DelimToken::Paren,
-                open_span:  DUMMY_SP,
-                close_span: DUMMY_SP,
-                tts: vec![
-                  TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("f")), IdentStyle::Plain)),
-                  TtToken(DUMMY_SP, Token::Comma),
-                  TtToken(DUMMY_SP, Token::Literal(Lit::Str_(intern(". ")), None)),
-                ],
-              })),
-            ], syn_context))),
+            node: Expr_::ExprMac(dummy_spanned(Mac_ {
+              path: path_from_segments(false, &[ast::Ident::new(intern("try"))]),
+              tts: vec![
+                TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("write")), IdentStyle::Plain)),
+                TtToken(DUMMY_SP, Token::Not),
+                TtDelimited(DUMMY_SP, Rc::new(Delimited {
+                  delim: DelimToken::Paren,
+                  open_span:  DUMMY_SP,
+                  close_span: DUMMY_SP,
+                  tts: vec![
+                    TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("f")), IdentStyle::Plain)),
+                    TtToken(DUMMY_SP, Token::Comma),
+                    TtToken(DUMMY_SP, Token::Literal(Lit::Str_(intern(". ")), None)),
+                  ],
+                })),
+              ],
+              ctxt: syn_context
+            })),
           }), DUMMY_NODE_ID))),
         ];
         if let Some(ref long_desc) = v.long_description {
           try_writes.push(P(dummy_spanned(Stmt_::StmtSemi(P(Expr {
             id:   DUMMY_NODE_ID,
             span: DUMMY_SP,
-            node: Expr_::ExprMac(dummy_spanned(Mac_::MacInvocTT(path_from_segments(false, &[ast::Ident::new(intern("try"))]), vec![
-              TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("write")), IdentStyle::Plain)),
-              TtToken(DUMMY_SP, Token::Not),
-              TtDelimited(DUMMY_SP, Rc::new(Delimited {
-                delim: DelimToken::Paren,
-                open_span:  DUMMY_SP,
-                close_span: DUMMY_SP,
-                tts: {
-                  let mut write_args = vec![
-                    TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("f")), IdentStyle::Plain)),
-                    TtToken(DUMMY_SP, Token::Comma),
-                    TtToken(DUMMY_SP, Token::Literal(Lit::Str_(long_desc.format_str), None)),
-                  ];
-                  for fa in long_desc.format_args.iter() {
-                    write_args.push(TtToken(DUMMY_SP, Token::Comma));
-                    let tt = fa.to_tokens(cx);
-                    write_args.extend(tt);
-                  };
-                  write_args
-                },
-              })),
-            ], syn_context))),
+            node: Expr_::ExprMac(dummy_spanned(Mac_ {
+              path: path_from_segments(false, &[ast::Ident::new(intern("try"))]),
+              tts: vec![
+                TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("write")), IdentStyle::Plain)),
+                TtToken(DUMMY_SP, Token::Not),
+                TtDelimited(DUMMY_SP, Rc::new(Delimited {
+                  delim: DelimToken::Paren,
+                  open_span:  DUMMY_SP,
+                  close_span: DUMMY_SP,
+                  tts: {
+                    let mut write_args = vec![
+                      TtToken(DUMMY_SP, Token::Ident(ast::Ident::new(intern("f")), IdentStyle::Plain)),
+                      TtToken(DUMMY_SP, Token::Comma),
+                      TtToken(DUMMY_SP, Token::Literal(Lit::Str_(long_desc.format_str), None)),
+                    ];
+                    for fa in long_desc.format_args.iter() {
+                      write_args.push(TtToken(DUMMY_SP, Token::Comma));
+                      let tt = fa.to_tokens(cx);
+                      write_args.extend(tt);
+                    };
+                    write_args
+                  },
+                })),
+              ],
+              ctxt: syn_context
+            })),
           }), DUMMY_NODE_ID))));
         };
         try_writes
