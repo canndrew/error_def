@@ -62,8 +62,8 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
 
     // Get the name of this variant.
     let variant_name = match parser.bump_and_get() {
-      Ok(Token::Eof)                             => break,
-      Ok(Token::Ident(ident, IdentStyle::Plain)) => ident,
+      Token::Eof                             => break,
+      Token::Ident(ident, IdentStyle::Plain) => ident,
       _ => {
         let _ = parser.fatal("Expected variant name");
         return DummyResult::any(sp);
@@ -73,10 +73,10 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
 
     let (from_idx, members): (Option<usize>, Vec<StructField>) = match parser.bump_and_get() {
       // It's a unit-like variant. (ie. not a struct variant)
-      Ok(Token::FatArrow) => (None, Vec::new()),
+      Token::FatArrow => (None, Vec::new()),
 
       // It's a struct variant
-      Ok(Token::OpenDelim(DelimToken::Brace)) => {
+      Token::OpenDelim(DelimToken::Brace) => {
         let mut members: Vec<StructField> = Vec::new();
         let mut from_memb_idx: Option<usize> = None;
 
@@ -146,7 +146,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
         };
         
         match parser.bump_and_get() {
-          Ok(Token::FatArrow) => (),
+          Token::FatArrow => (),
           _ => {
             let _ = parser.fatal("Expected =>");
             return DummyResult::any(sp);
@@ -163,7 +163,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
 
     // Parse the short description.
     let short_desc = match parser.bump_and_get() {
-      Ok(Token::Literal(Lit::Str_(sd), None)) => sd,
+      Token::Literal(Lit::Str_(sd), None) => sd,
       _ => {
         let _ = parser.fatal("Expected a string literal");
         return DummyResult::any(sp);
@@ -175,7 +175,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       let _ = parser.bump();
 
       let format_str = match parser.bump_and_get() {
-        Ok(Token::Literal(Lit::Str_(sd), None)) => sd,
+        Token::Literal(Lit::Str_(sd), None) => sd,
         _ => {
           let _ = parser.fatal("Expected a format string");
           return DummyResult::any(sp);
@@ -185,8 +185,8 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       let mut format_args: Vec<P<Expr>> = Vec::new();
       loop {
         match parser.bump_and_get() {
-          Ok(Token::Comma) => (),
-          Ok(Token::CloseDelim(DelimToken::Paren)) => break,
+          Token::Comma => (),
+          Token::CloseDelim(DelimToken::Paren) => break,
           _ => {
             let _ = parser.fatal("Expected comma");
             return DummyResult::any(sp);
@@ -232,8 +232,8 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     });
 
     match parser.bump_and_get() {
-      Ok(Token::Comma)  => (),
-      Ok(Token::Eof)    => (),
+      Token::Comma  => (),
+      Token::Eof    => (),
       _ => {
         let _ = parser.fatal("Expected comma");
         return DummyResult::any(sp);
