@@ -4,28 +4,26 @@
 extern crate syntax;
 extern crate rustc;
 extern crate rustc_plugin;
-extern crate rustc_front;
 
 use syntax::codemap::{Span, spanned, DUMMY_SP, dummy_spanned, Spanned};
 use syntax::ast::{self, TokenTree, EnumDef};
 use syntax::ext::base::{ExtCtxt, MacResult, DummyResult, SyntaxExtension, MacEager};
 use syntax::ext::build::AstBuilder;
-use syntax::parse::token::{self, IdentStyle, intern, Token, Lit, InternedString, DelimToken,
-                           special_idents};
+use syntax::parse::token::{self, intern, Token, Lit, InternedString, DelimToken,
+                           keywords};
 use syntax::parse;
 use syntax::util::small_vector::SmallVector;
 use syntax::ast::{Variant_, Visibility, VariantData, Variant, Attribute_, AttrStyle,
-                  StrStyle, Lit_, MetaItem_, StructField, Name, Unsafety, ImplPolarity,
-                  TraitRef, Ty, Ty_, ImplItem, MethodSig, FnDecl, MutTy, Mutability, FunctionRetTy,
-                  ExplicitSelf_, Block, Expr, Expr_, Arm, Pat, Pat_, ImplItemKind, Generics,
-                  DUMMY_NODE_ID, BlockCheckMode, Item, Item_, Path, PathSegment,
-                  PathParameters, Arg, BindingMode, AngleBracketedParameterData, Delimited, Stmt_,
-                  Mac_, FieldPat, StructFieldKind, Field, Constness};
+                  StrStyle, LitKind, MetaItemKind, StructField, Name, Unsafety, ImplPolarity,
+                  TraitRef, Ty, TyKind, ImplItem, MethodSig, FnDecl, MutTy, Mutability, FunctionRetTy,
+                  SelfKind, Block, Expr, ExprKind, Arm, Pat, PatKind, ImplItemKind, Generics,
+                  DUMMY_NODE_ID, BlockCheckMode, Item, ItemKind, Path, PathSegment,
+                  PathParameters, Arg, BindingMode, AngleBracketedParameterData, Delimited, StmtKind,
+                  Mac_, FieldPat, Field, Constness, Defaultness};
 use syntax::abi::Abi;
 use syntax::ptr::P;
 use syntax::attr::{mk_sugared_doc_attr, mk_attr_id};
 use syntax::ext::quote::rt::ToTokens;
-use syntax::owned_slice::OwnedSlice;
 
 use rustc_plugin::Registry;
 
@@ -63,7 +61,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     // Get the name of this variant.
     let variant_name = match parser.bump_and_get() {
       Token::Eof                             => break,
-      Token::Ident(ident, IdentStyle::Plain) => ident,
+      Token::Ident(ident) => ident,
       _ => {
         let _ = parser.fatal("Expected variant name");
         return DummyResult::any(sp);
@@ -96,7 +94,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
           // #[from] attribute so we can remove it.
           let mut from_attr_idx: Option<usize> = None;
           for (i, attr) in attrs.iter().enumerate() {
-            if let MetaItem_::MetaWord(ref attr_name) = attr.node.value.node {
+            if let MetaItemKind::Word(ref attr_name) = attr.node.value.node {
               if *attr_name == "from" {   // We've found a #[from] attribute.
                 match from_attr_idx {
                   Some(_) => {
@@ -124,19 +122,16 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
           };
 
           // Parse the name and type of the member.
-          let sf = match parser.parse_single_struct_field(Visibility::Public, attrs) {
+          let sf = match parser.parse_single_struct_field(Visibility::Inherited, attrs) {
             Ok(sf)  => sf,
             Err(_)  => {
               let _ = parser.fatal("Expected struct field");
               return DummyResult::any(sp);
             },
           };
-          match sf.node.kind {
-            StructFieldKind::UnnamedField(_)  => {
-              let _ = parser.fatal("Expected a named field");
-              return DummyResult::any(sp);
-            },
-            _ => (),
+          if sf.ident.is_none() {
+            let _ = parser.fatal("Expected a named field");
+            return DummyResult::any(sp);
           }
           members.push(sf);
           if parser.token == Token::CloseDelim(DelimToken::Brace) {
@@ -247,14 +242,14 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
    * Now that we have parsed the code, build an AST out of it. 
    *
    */
-  let vars = variants.iter().map(|v| v.variant.clone()).collect();
+  let vars = variants.iter().map(|v| (*v.variant).clone()).collect();
 
   // Create our enum item.
   items.push(P(Item {
     ident: type_name,
     attrs: Vec::new(),
     id:    DUMMY_NODE_ID,
-    node:  Item_::ItemEnum(
+    node:  ItemKind::Enum(
       EnumDef {
         variants: vars,
       },
@@ -268,13 +263,13 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
   // Create an AST for the &str type to use later.
   let str_type = P(Ty {
     id: DUMMY_NODE_ID,
-    node: Ty_::TyRptr(None, MutTy {
+    node: TyKind::Rptr(None, MutTy {
       ty: P(Ty {
         id: DUMMY_NODE_ID,
-        node: Ty_::TyPath(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("str"))])),
+        node: TyKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("str"))])),
         span: DUMMY_SP,
       }),
-      mutbl: Mutability::MutImmutable,
+      mutbl: Mutability::Immutable,
     }),
     span: DUMMY_SP,
   });
@@ -283,9 +278,9 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
   let unused_attr = dummy_spanned(Attribute_ {
     id: mk_attr_id(),
     style: AttrStyle::Outer,
-    value: P(dummy_spanned(MetaItem_::MetaList(
+    value: P(dummy_spanned(MetaItemKind::List(
       InternedString::new_from_name(intern("allow")),
-      vec![P(dummy_spanned(MetaItem_::MetaWord(InternedString::new_from_name(intern("unused_variables")))))]
+      vec![P(dummy_spanned(MetaItemKind::Word(InternedString::new_from_name(intern("unused_variables")))))]
     ))),
     is_sugared_doc: false,
   });
@@ -297,36 +292,36 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     abi:       Abi::Rust,
     decl:      P(FnDecl {
       inputs:  vec![
-        Arg::new_self(DUMMY_SP, Mutability::MutImmutable, special_idents::self_),
+        Arg::new_self(DUMMY_SP, Mutability::Immutable, keywords::SelfValue.ident()),
         Arg {
           ty: P(Ty {
             id: DUMMY_NODE_ID,
-            node: Ty_::TyRptr(None, MutTy {
+            node: TyKind::Rptr(None, MutTy {
               ty: P(Ty {
                 id:   DUMMY_NODE_ID,
-                node: Ty_::TyPath(None, path_from_segments(true, &[
+                node: TyKind::Path(None, path_from_segments(true, &[
                   ast::Ident::with_empty_ctxt(intern("std")),
                   ast::Ident::with_empty_ctxt(intern("fmt")),
                   ast::Ident::with_empty_ctxt(intern("Formatter")),
                 ])),
                 span: DUMMY_SP,
               }),
-              mutbl: Mutability::MutMutable,
+              mutbl: Mutability::Mutable,
             }),
             span: DUMMY_SP,
           }),
           pat: P(Pat {
             id:   DUMMY_NODE_ID,
-            node: Pat_::PatIdent(BindingMode::ByValue(Mutability::MutImmutable), dummy_spanned(ast::Ident::with_empty_ctxt(intern("f"))), None),
+            node: PatKind::Ident(BindingMode::ByValue(Mutability::Immutable), dummy_spanned(ast::Ident::with_empty_ctxt(intern("f"))), None),
             span: DUMMY_SP,
           }),
           id: DUMMY_NODE_ID,
         },
       ],
-      output: FunctionRetTy::Return(P(Ty {
+      output: FunctionRetTy::Ty(P(Ty {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,
-        node: Ty_::TyPath(None, Path {
+        node: TyKind::Path(None, Path {
           span: DUMMY_SP,
           global: true,
           segments: vec![
@@ -342,23 +337,23 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
               identifier: ast::Ident::with_empty_ctxt(intern("Result")),
               parameters: PathParameters::AngleBracketed(AngleBracketedParameterData {
                 lifetimes: Vec::new(),
-                types:     OwnedSlice::from_vec(vec![
+                types:     P::from_vec(vec![
                   P(Ty {
                     id:   DUMMY_NODE_ID,
                     span: DUMMY_SP,
-                    node: Ty_::TyTup(Vec::new()),
+                    node: TyKind::Tup(Vec::new()),
                   }),
                   P(Ty {
                     id:   DUMMY_NODE_ID,
                     span: DUMMY_SP,
-                    node: Ty_::TyPath(None, path_from_segments(true, &[
+                    node: TyKind::Path(None, path_from_segments(true, &[
                       ast::Ident::with_empty_ctxt(intern("std")),
                       ast::Ident::with_empty_ctxt(intern("fmt")),
                       ast::Ident::with_empty_ctxt(intern("Error")),
                     ])),
                   })
                 ]),
-                bindings:  OwnedSlice::empty(),
+                bindings:  P::new(),
               }),
             },
           ],
@@ -367,14 +362,14 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       variadic: false,
     }),
     generics: Generics::default(),
-    explicit_self: dummy_spanned(ExplicitSelf_::SelfRegion(None, Mutability::MutImmutable, ast::Ident::with_empty_ctxt(intern("what_is_this")))),
+    explicit_self: dummy_spanned(SelfKind::Region(None, Mutability::Immutable, ast::Ident::with_empty_ctxt(intern("what_is_this")))),
   };
 
   // Our actual code block for Debug::fmt.
   let debug_fmt_block = mk_match_block(&variants, type_name, |v| P(Expr {
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
-    node: Expr_::ExprBlock(P(Block {
+    node: ExprKind::Block(P(Block {
       stmts: vec![{
         match v.variant.node.data {
           VariantData::Struct(ref fields, _) => {
@@ -385,20 +380,17 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
                 ss.push(',');
               };
               first = false;
-              let field_name = match f.node.kind {
-                StructFieldKind::NamedField(ident, _) => ident,
-                _                                     => unreachable!(),
-              };
+              let field_name = f.ident.unwrap();
               ss.push_str(&format!(" {}: {{:?}}", field_name)[..]);
             }
             ss.push_str(" }} /* {} */");
-            P(dummy_spanned(Stmt_::StmtSemi(P(Expr {
+            dummy_spanned(StmtKind::Semi(P(Expr {
               id:   DUMMY_NODE_ID,
               span: DUMMY_SP,
-              node: Expr_::ExprMac(dummy_spanned(Mac_ {
+              node: ExprKind::Mac(dummy_spanned(Mac_ {
                 path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
                 tts:  vec![
-                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")), IdentStyle::Plain)),
+                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
                   TokenTree::Token(DUMMY_SP, Token::Not),
                   TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
                     delim: DelimToken::Paren,
@@ -406,20 +398,17 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
                     close_span: DUMMY_SP,
                     tts: {
                       let mut tts = vec![
-                        TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")), IdentStyle::Plain)),
+                        TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
                         TokenTree::Token(DUMMY_SP, Token::Comma),
                         TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(intern(&ss[..])), None)),
                       ];
                       for f in fields.iter() {
                         tts.push(TokenTree::Token(DUMMY_SP, Token::Comma));
-                        let field_name = match f.node.kind {
-                          StructFieldKind::NamedField(ident, _)  => ident,
-                          _                                      => unreachable!(),
-                        };
-                        tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(field_name, IdentStyle::Plain)));
+                        let field_name = f.ident.unwrap();
+                        tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(field_name)));
                       };
                       tts.push(TokenTree::Token(DUMMY_SP, Token::Comma));
-                      tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(special_idents::self_, IdentStyle::Plain)));
+                      tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(keywords::SelfValue.ident())));
                       tts
                     },
                   })),
@@ -427,54 +416,54 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
                 ctxt: syn_context
               })),
               attrs: None,
-            }), DUMMY_NODE_ID)))
+            }), DUMMY_NODE_ID))
           },
           VariantData::Tuple(..) => unreachable!(),
           VariantData::Unit(_) => {
             let ss = format!("{} /* {{}} */", v.variant.node.name);
-            P(dummy_spanned(Stmt_::StmtSemi(P(Expr {
+            dummy_spanned(StmtKind::Semi(P(Expr {
               id:   DUMMY_NODE_ID,
               span: DUMMY_SP,
-              node: Expr_::ExprMac(dummy_spanned(Mac_ {
+              node: ExprKind::Mac(dummy_spanned(Mac_ {
                 path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
                 tts: vec![
-                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")), IdentStyle::Plain)),
+                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
                   TokenTree::Token(DUMMY_SP, Token::Not),
                   TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
                     delim: DelimToken::Paren,
                     open_span:  DUMMY_SP,
                     close_span: DUMMY_SP,
                     tts: vec![
-                      TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")), IdentStyle::Plain)),
+                      TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
                       TokenTree::Token(DUMMY_SP, Token::Comma),
                       TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(intern(&ss[..])), None)),
                       TokenTree::Token(DUMMY_SP, Token::Comma),
-                      TokenTree::Token(DUMMY_SP, Token::Ident(special_idents::self_, IdentStyle::Plain)),
+                      TokenTree::Token(DUMMY_SP, Token::Ident(keywords::SelfValue.ident())),
                     ],
                   })),
                 ],
                 ctxt: syn_context
               })),
               attrs: None,
-            }), DUMMY_NODE_ID)))
+            }), DUMMY_NODE_ID))
           }
         }
       }],
       expr: Some(P(Expr {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,
-        node: Expr_::ExprCall(
+        node: ExprKind::Call(
           P(Expr {
             id:    DUMMY_NODE_ID,
             span:  DUMMY_SP,
-            node:  Expr_::ExprPath(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("Ok"))])),
+            node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("Ok"))])),
             attrs: None,
           }),
           vec![
             P(Expr {
               id:    DUMMY_NODE_ID,
               span:  DUMMY_SP,
-              node:  Expr_::ExprTup(Vec::new()),
+              node:  ExprKind::Tup(Vec::new()),
               attrs: None,
             }),
           ]
@@ -483,42 +472,43 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       })),
       id:    DUMMY_NODE_ID,
       span:  DUMMY_SP,
-      rules: BlockCheckMode::DefaultBlock,
+      rules: BlockCheckMode::Default,
     })),
     attrs: None,
   }));
 
   // The AST for the method implementation of Debug::fmt
-  let debug_fmt_impl = P(ImplItem {
+  let debug_fmt_impl = ImplItem {
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
     ident: ast::Ident::with_empty_ctxt(intern("fmt")),
     vis:   Visibility::Inherited,
+    defaultness: Defaultness::Final,
     attrs: vec![unused_attr.clone()],
     node:  ImplItemKind::Method(fmt_meth_sig.clone(), debug_fmt_block),
-  });
+  };
 
   // The code for Display::fmt
   let display_fmt_block = mk_match_block(&variants, type_name, |v| P(Expr {
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
-    node: Expr_::ExprBlock(P(Block {
+    node: ExprKind::Block(P(Block {
       stmts: {
         let mut try_writes = vec![
-          P(dummy_spanned(Stmt_::StmtSemi(P(Expr {
+          dummy_spanned(StmtKind::Semi(P(Expr {
             id:   DUMMY_NODE_ID,
             span: DUMMY_SP,
-            node: Expr_::ExprMac(dummy_spanned(Mac_ {
+            node: ExprKind::Mac(dummy_spanned(Mac_ {
               path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
               tts: vec![
-                TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")), IdentStyle::Plain)),
+                TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
                 TokenTree::Token(DUMMY_SP, Token::Not),
                 TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
                   delim: DelimToken::Paren,
                   open_span:  DUMMY_SP,
                   close_span: DUMMY_SP,
                   tts: vec![
-                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")), IdentStyle::Plain)),
+                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
                     TokenTree::Token(DUMMY_SP, Token::Comma),
                     TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(v.short_description), None)),
                   ],
@@ -527,21 +517,21 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
               ctxt: syn_context
             })),
             attrs: None,
-          }), DUMMY_NODE_ID))),
-          P(dummy_spanned(Stmt_::StmtSemi(P(Expr {
+          }), DUMMY_NODE_ID)),
+          dummy_spanned(StmtKind::Semi(P(Expr {
             id:   DUMMY_NODE_ID,
             span: DUMMY_SP,
-            node: Expr_::ExprMac(dummy_spanned(Mac_ {
+            node: ExprKind::Mac(dummy_spanned(Mac_ {
               path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
               tts: vec![
-                TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")), IdentStyle::Plain)),
+                TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
                 TokenTree::Token(DUMMY_SP, Token::Not),
                 TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
                   delim: DelimToken::Paren,
                   open_span:  DUMMY_SP,
                   close_span: DUMMY_SP,
                   tts: vec![
-                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")), IdentStyle::Plain)),
+                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
                     TokenTree::Token(DUMMY_SP, Token::Comma),
                     TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(intern(". ")), None)),
                   ],
@@ -550,16 +540,16 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
               ctxt: syn_context
             })),
             attrs: None,
-          }), DUMMY_NODE_ID))),
+          }), DUMMY_NODE_ID)),
         ];
         if let Some(ref long_desc) = v.long_description {
-          try_writes.push(P(dummy_spanned(Stmt_::StmtSemi(P(Expr {
+          try_writes.push(dummy_spanned(StmtKind::Semi(P(Expr {
             id:   DUMMY_NODE_ID,
             span: DUMMY_SP,
-            node: Expr_::ExprMac(dummy_spanned(Mac_ {
+            node: ExprKind::Mac(dummy_spanned(Mac_ {
               path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
               tts: vec![
-                TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")), IdentStyle::Plain)),
+                TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
                 TokenTree::Token(DUMMY_SP, Token::Not),
                 TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
                   delim: DelimToken::Paren,
@@ -567,7 +557,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
                   close_span: DUMMY_SP,
                   tts: {
                     let mut write_args = vec![
-                      TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")), IdentStyle::Plain)),
+                      TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
                       TokenTree::Token(DUMMY_SP, Token::Comma),
                       TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(long_desc.format_str), None)),
                     ];
@@ -583,25 +573,25 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
               ctxt: syn_context
             })),
             attrs: None,
-          }), DUMMY_NODE_ID))));
+          }), DUMMY_NODE_ID)));
         };
         try_writes
       },
       expr: Some(P(Expr {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,
-        node: Expr_::ExprCall(
+        node: ExprKind::Call(
           P(Expr {
             id:    DUMMY_NODE_ID,
             span:  DUMMY_SP,
-            node:  Expr_::ExprPath(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("Ok"))])),
+            node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("Ok"))])),
             attrs: None,
           }),
           vec![
             P(Expr {
               id:    DUMMY_NODE_ID,
               span:  DUMMY_SP,
-              node:  Expr_::ExprTup(Vec::new()),
+              node:  ExprKind::Tup(Vec::new()),
               attrs: None,
             }),
           ]
@@ -610,20 +600,21 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       })),
       id:    DUMMY_NODE_ID,
       span:  DUMMY_SP,
-      rules: BlockCheckMode::DefaultBlock,
+      rules: BlockCheckMode::Default,
     })),
     attrs: None,
   }));
 
   // The method impl for Display::fmt
-  let display_fmt_impl = P(ImplItem {
+  let display_fmt_impl = ImplItem {
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
     ident: ast::Ident::with_empty_ctxt(intern("fmt")),
     vis:   Visibility::Inherited,
+    defaultness: Defaultness::Final,
     attrs: vec![unused_attr.clone()],
     node:  ImplItemKind::Method(fmt_meth_sig, display_fmt_block),
-  });
+  };
 
   // AST of the method signature for Error::description
   let description_meth_sig = MethodSig {
@@ -631,45 +622,46 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     constness: Constness::NotConst,
     abi:       Abi::Rust,
     decl:      P(FnDecl {
-      inputs:   vec![Arg::new_self(DUMMY_SP, Mutability::MutImmutable, special_idents::self_)],
-      output:   FunctionRetTy::Return(str_type),
+      inputs:   vec![Arg::new_self(DUMMY_SP, Mutability::Immutable, keywords::SelfValue.ident())],
+      output:   FunctionRetTy::Ty(str_type),
       variadic: false,
     }),
     generics: Generics::default(),
-    explicit_self: dummy_spanned(ExplicitSelf_::SelfRegion(None, Mutability::MutImmutable, ast::Ident::with_empty_ctxt(intern("what_is_this")))),
+    explicit_self: dummy_spanned(SelfKind::Region(None, Mutability::Immutable, ast::Ident::with_empty_ctxt(intern("what_is_this")))),
   };
 
   // The code for our Error::description implementation
   let description_block = mk_match_block(&variants, type_name, |v| P(Expr {
     id:    DUMMY_NODE_ID,
     span:  DUMMY_SP,
-    node:  Expr_::ExprLit(P(dummy_spanned(Lit_::LitStr(InternedString::new_from_name(v.short_description), StrStyle::CookedStr)))),
+    node:  ExprKind::Lit(P(dummy_spanned(LitKind::Str(InternedString::new_from_name(v.short_description), StrStyle::Cooked)))),
     attrs: None,
   }));
 
   // The method implementation of Error::description
-  let description_impl = P(ImplItem {
+  let description_impl = ImplItem {
     id:    DUMMY_NODE_ID,
     span:  DUMMY_SP,
     ident: ast::Ident::with_empty_ctxt(intern("description")),
     vis:   Visibility::Inherited,
+    defaultness: Defaultness::Final,
     attrs: vec![unused_attr.clone()],
     node:  ImplItemKind::Method(description_meth_sig, description_block),
-  });
+  };
 
   // AST of the type &Error
   let ref_error_ty = P(Ty {
-    node: Ty_::TyRptr(None, MutTy {
+    node: TyKind::Rptr(None, MutTy {
       ty: P(Ty {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,
-        node: Ty_::TyPath(None, path_from_segments(true, &[
+        node: TyKind::Path(None, path_from_segments(true, &[
           ast::Ident::with_empty_ctxt(intern("std")),
           ast::Ident::with_empty_ctxt(intern("error")),
           ast::Ident::with_empty_ctxt(intern("Error")),
         ])),
       }),
-      mutbl: Mutability::MutImmutable,
+      mutbl: Mutability::Immutable,
     }),
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
@@ -681,11 +673,11 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     constness: Constness::NotConst,
     abi:       Abi::Rust,
     decl:      P(FnDecl {
-      inputs:   vec![Arg::new_self(DUMMY_SP, Mutability::MutImmutable, special_idents::self_)],
-      output:   FunctionRetTy::Return(P(Ty {
+      inputs:   vec![Arg::new_self(DUMMY_SP, Mutability::Immutable, keywords::SelfValue.ident())],
+      output:   FunctionRetTy::Ty(P(Ty {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,
-        node: Ty_::TyPath(None, Path {
+        node: TyKind::Path(None, Path {
           span:   DUMMY_SP,
           global: true,
           segments: vec![
@@ -701,8 +693,8 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
               identifier: ast::Ident::with_empty_ctxt(intern("Option")),
               parameters: PathParameters::AngleBracketed(AngleBracketedParameterData {
                 lifetimes: Vec::new(),
-                types:     OwnedSlice::from_vec(vec![ref_error_ty.clone()]),
-                bindings:  OwnedSlice::empty(),
+                types:     P::from_vec(vec![ref_error_ty.clone()]),
+                bindings:  P::new(),
               }),
             },
           ],
@@ -711,7 +703,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       variadic: false,
     }),
     generics: Generics::default(),
-    explicit_self: dummy_spanned(ExplicitSelf_::SelfRegion(None, Mutability::MutImmutable, ast::Ident::with_empty_ctxt(intern("what_is_this")))),
+    explicit_self: dummy_spanned(SelfKind::Region(None, Mutability::Immutable, ast::Ident::with_empty_ctxt(intern("what_is_this")))),
   };
 
   // Code for Error::cause
@@ -719,10 +711,10 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
     node: match v.from_idx {
-      Some(i) => Expr_::ExprCall(P(Expr {
+      Some(i) => ExprKind::Call(P(Expr {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,
-        node: Expr_::ExprPath(None, path_from_segments(true, &[
+        node: ExprKind::Path(None, path_from_segments(true, &[
           ast::Ident::with_empty_ctxt(intern("std")),
           ast::Ident::with_empty_ctxt(intern("option")),
           ast::Ident::with_empty_ctxt(intern("Option")),
@@ -732,15 +724,12 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       }), vec![P(Expr {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,
-        node: Expr_::ExprCast(P(Expr {
+        node: ExprKind::Cast(P(Expr {
           id:   DUMMY_NODE_ID,
           span: DUMMY_SP,
-          node: Expr_::ExprPath(None, path_from_segments(false, &[
+          node: ExprKind::Path(None, path_from_segments(false, &[
             match v.variant.node.data {
-              VariantData::Struct(ref fields, _) => match fields[i].node.kind {
-                StructFieldKind::NamedField(ident, _) => ident,
-                StructFieldKind::UnnamedField(_)      => unreachable!(),
-              },
+              VariantData::Struct(ref fields, _) => fields[i].ident.unwrap(),
               VariantData::Tuple(..) => unreachable!(),
               VariantData::Unit(_)   => unreachable!(),
             },
@@ -749,7 +738,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
         }), ref_error_ty.clone()),
         attrs: None,
       })]),
-      None    => Expr_::ExprPath(None, path_from_segments(true, &[
+      None    => ExprKind::Path(None, path_from_segments(true, &[
         ast::Ident::with_empty_ctxt(intern("std")),
         ast::Ident::with_empty_ctxt(intern("option")),
         ast::Ident::with_empty_ctxt(intern("Option")),
@@ -760,21 +749,22 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
   }));
 
   // The method impl for Error::cause
-  let cause_impl = P(ImplItem {
+  let cause_impl = ImplItem {
     id:    DUMMY_NODE_ID,
     span:  DUMMY_SP,
     ident: ast::Ident::with_empty_ctxt(intern("cause")),
     vis:   Visibility::Inherited,
+    defaultness: Defaultness::Final,
     attrs: vec![unused_attr.clone()],
     node:  ImplItemKind::Method(cause_meth_sig, cause_block),
-  });
+  };
 
   // The AST of our implementation of fmt::Debug
   items.push(P(Item {
     ident: ast::Ident::with_empty_ctxt(intern("whats_this_then")),
     attrs: Vec::new(),
     id:    DUMMY_NODE_ID,
-    node:  Item_::ItemImpl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
+    node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
       path:   path_from_segments(true, &[
         ast::Ident::with_empty_ctxt(intern("std")),
         ast::Ident::with_empty_ctxt(intern("fmt")),
@@ -783,7 +773,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       ref_id: DUMMY_NODE_ID,
     }), P(Ty {
       id:   DUMMY_NODE_ID,
-      node: Ty_::TyPath(None, path_from_segments(false, &[type_name])),
+      node: TyKind::Path(None, path_from_segments(false, &[type_name])),
       span: DUMMY_SP,
     }), vec![
       debug_fmt_impl,
@@ -797,7 +787,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     ident: ast::Ident::with_empty_ctxt(intern("whats_this_then")),
     attrs: Vec::new(),
     id:    DUMMY_NODE_ID,
-    node:  Item_::ItemImpl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
+    node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
       path:   path_from_segments(true, &[
         ast::Ident::with_empty_ctxt(intern("std")),
         ast::Ident::with_empty_ctxt(intern("fmt")),
@@ -806,7 +796,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       ref_id: DUMMY_NODE_ID,
     }), P(Ty {
       id:   DUMMY_NODE_ID,
-      node: Ty_::TyPath(None, path_from_segments(false, &[type_name])),
+      node: TyKind::Path(None, path_from_segments(false, &[type_name])),
       span: DUMMY_SP,
     }), vec![
       display_fmt_impl,
@@ -820,7 +810,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     ident: ast::Ident::with_empty_ctxt(intern("seriously_what_should_this_be")),
     attrs: Vec::new(),
     id:    DUMMY_NODE_ID,
-    node:  Item_::ItemImpl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
+    node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
       path:   path_from_segments(true, &[
         ast::Ident::with_empty_ctxt(intern("std")),
         ast::Ident::with_empty_ctxt(intern("error")),
@@ -829,7 +819,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       ref_id: DUMMY_NODE_ID,
     }), P(Ty {
       id:   DUMMY_NODE_ID,
-      node: Ty_::TyPath(None, path_from_segments(false, &[type_name])),
+      node: TyKind::Path(None, path_from_segments(false, &[type_name])),
       span: DUMMY_SP,
     }), vec![
       description_impl,
@@ -843,7 +833,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
   for v in variants {
     if let VariantData::Struct(ref fields, _) = v.variant.node.data {
       if fields.len() == 1 && v.from_idx == Some(0) {
-        let field = &fields[0].node;
+        let field = &fields[0];
         let from_meth_sig = MethodSig {
           unsafety:      Unsafety::Normal,
           constness:     Constness::NotConst,
@@ -852,36 +842,33 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
             inputs: vec![Arg {
               ty:  field.ty.clone(),
               pat: P(Pat {
-                node: Pat_::PatIdent(BindingMode::ByValue(Mutability::MutImmutable), dummy_spanned(ast::Ident::with_empty_ctxt(intern("e"))), None),
+                node: PatKind::Ident(BindingMode::ByValue(Mutability::Immutable), dummy_spanned(ast::Ident::with_empty_ctxt(intern("e"))), None),
                 id:   DUMMY_NODE_ID,
                 span: DUMMY_SP,
               }),
               id:  DUMMY_NODE_ID,
             }],
-            output: FunctionRetTy::Return(P(Ty {
+            output: FunctionRetTy::Ty(P(Ty {
               id:   DUMMY_NODE_ID,
               span: DUMMY_SP,
-              node: Ty_::TyPath(None, path_from_segments(false, &[type_name])),
+              node: TyKind::Path(None, path_from_segments(false, &[type_name])),
             })),
             variadic: false,
           }),
           generics:      Generics::default(),
-          explicit_self: dummy_spanned(ExplicitSelf_::SelfStatic),
+          explicit_self: dummy_spanned(SelfKind::Static),
         };
         let from_meth_block = P(Block {
           stmts: Vec::new(),
           expr:  Some(P(Expr {
             id:   DUMMY_NODE_ID,
             span: DUMMY_SP,
-            node: Expr_::ExprStruct(
+            node: ExprKind::Struct(
               path_from_segments(false, &[type_name, v.variant.node.name]),
               vec![Field {
-                ident: match field.kind {
-                  StructFieldKind::NamedField(ident, _)  => dummy_spanned(ident),
-                  StructFieldKind::UnnamedField(_)       => panic!("not possible"),
-                },
+                ident: dummy_spanned(field.ident.unwrap()),
                 expr: P(Expr {
-                  node:  Expr_::ExprPath(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("e"))])),
+                  node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("e"))])),
                   id:    DUMMY_NODE_ID,
                   span:  DUMMY_SP,
                   attrs: None,
@@ -893,23 +880,24 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
             attrs: None,
           })),
           id:    DUMMY_NODE_ID,
-          rules: BlockCheckMode::DefaultBlock,
+          rules: BlockCheckMode::Default,
           span:  DUMMY_SP,
         });
-        let from_meth_impl = P(ImplItem {
+        let from_meth_impl = ImplItem {
           id:    DUMMY_NODE_ID,
           span:  DUMMY_SP,
           ident: ast::Ident::with_empty_ctxt(intern("from")),
           vis:   Visibility::Inherited,
+          defaultness: Defaultness::Final,
           attrs: Vec::new(),
           node:  ImplItemKind::Method(from_meth_sig, from_meth_block),
-        });
+        };
 
         items.push(P(Item {
           ident: ast::Ident::with_empty_ctxt(intern("zoomzoom")),
           attrs: Vec::new(),
           id:    DUMMY_NODE_ID,
-          node:  Item_::ItemImpl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
+          node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
             path:   Path {
               span:   DUMMY_SP,
               global: true,
@@ -926,8 +914,8 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
                   identifier: ast::Ident::with_empty_ctxt(intern("From")),
                   parameters: PathParameters::AngleBracketed(AngleBracketedParameterData {
                     lifetimes: Vec::new(),
-                    types:     OwnedSlice::from_vec(vec![field.ty.clone()]),
-                    bindings:  OwnedSlice::empty(),
+                    types:     P::from_vec(vec![field.ty.clone()]),
+                    bindings:  P::new(),
                   }),
                 },
               ],
@@ -935,7 +923,7 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
             ref_id: DUMMY_NODE_ID,
           }), P(Ty {
             id:   DUMMY_NODE_ID,
-            node: Ty_::TyPath(None, path_from_segments(false, &[type_name])),
+            node: TyKind::Path(None, path_from_segments(false, &[type_name])),
             span: DUMMY_SP,
           }), vec![
             from_meth_impl,
@@ -978,7 +966,7 @@ fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F)
 {
   let expr_self = P(Expr {
     id:    DUMMY_NODE_ID,
-    node:  Expr_::ExprPath(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("self"))])),
+    node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("self"))])),
     span:  DUMMY_SP,
     attrs: None,
   });
@@ -987,7 +975,7 @@ fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F)
     stmts: Vec::new(),
     expr:  Some(P(Expr {
       id:   DUMMY_NODE_ID,
-      node: Expr_::ExprMatch(
+      node: ExprKind::Match(
         expr_self,
         {
           let mut arms: Vec<Arm> = Vec::new();
@@ -997,27 +985,25 @@ fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F)
               pats:  vec![P(Pat {
                 id:   DUMMY_NODE_ID,
                 span: DUMMY_SP,
-                node: Pat_::PatRegion(
+                node: PatKind::Ref(
                   P(Pat {
                     id: DUMMY_NODE_ID,
                     node: match v.variant.node.data {
-                      VariantData::Struct(ref fields, _)  => Pat_::PatStruct(
+                      VariantData::Struct(ref fields, _)  => PatKind::Struct(
                         path_from_segments(false, &[type_name, v.variant.node.name]),
                         {
                           let mut pat_fields: Vec<Spanned<FieldPat>> = Vec::new();
                           for field in fields.iter() {
                             pat_fields.push(dummy_spanned(FieldPat {
-                              ident: match field.node.kind {
-                                StructFieldKind::NamedField(ident, _)  => ident,
-                                StructFieldKind::UnnamedField(_)       => panic!("not possible"),
-                              },
+                              ident: field.ident.unwrap(),
                               pat:  P(Pat {
                                 id:   DUMMY_NODE_ID,
                                 span: DUMMY_SP,
-                                node: Pat_::PatIdent(BindingMode::ByRef(Mutability::MutImmutable), dummy_spanned(match field.node.kind {
-                                  StructFieldKind::NamedField(ident, _)  => ident,
-                                  StructFieldKind::UnnamedField(_)       => panic!("not possible"),
-                                }), None),
+                                node: PatKind::Ident(
+                                  BindingMode::ByRef(Mutability::Immutable),
+                                  dummy_spanned(field.ident.unwrap()),
+                                  None
+                                ),
                               }),
                               is_shorthand: true,
                             }))
@@ -1027,12 +1013,11 @@ fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F)
                         false,
                       ),
                       VariantData::Tuple(..) => unreachable!(),
-                      VariantData::Unit(_) => Pat_::PatEnum(
-                        path_from_segments(false, &[type_name, v.variant.node.name]),
-                        Some(Vec::new()),
+                      VariantData::Unit(_) => PatKind::Path(
+                        path_from_segments(false, &[type_name, v.variant.node.name])
                       ),
                       /*
-                      VariantData::Unit(_) => Pat_::PatEnum(
+                      VariantData::Unit(_) => PatKind::Enum(
                         path_from_segments(false, &[type_name, v.variant.node.name]),
                         None,
                       ),
@@ -1040,7 +1025,7 @@ fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F)
                     },
                     span: DUMMY_SP,
                   }),
-                  Mutability::MutImmutable,
+                  Mutability::Immutable,
                 ),
               })],
               guard: None,
@@ -1054,7 +1039,7 @@ fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F)
       attrs: None,
     })),
     id:    DUMMY_NODE_ID,
-    rules: BlockCheckMode::DefaultBlock,
+    rules: BlockCheckMode::Default,
     span:  DUMMY_SP,
   })
 }
