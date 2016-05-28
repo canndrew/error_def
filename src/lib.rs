@@ -8,7 +8,6 @@ extern crate rustc_plugin;
 use syntax::codemap::{Span, spanned, DUMMY_SP, dummy_spanned, Spanned};
 use syntax::ast::{self, TokenTree, EnumDef};
 use syntax::ext::base::{ExtCtxt, MacResult, DummyResult, SyntaxExtension, MacEager};
-use syntax::ext::build::AstBuilder;
 use syntax::parse::token::{self, intern, Token, Lit, InternedString, DelimToken,
                            keywords};
 use syntax::parse;
@@ -292,7 +291,10 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     abi:       Abi::Rust,
     decl:      P(FnDecl {
       inputs:  vec![
-        Arg::new_self(DUMMY_SP, Mutability::Immutable, keywords::SelfValue.ident()),
+        Arg::from_self(Spanned {
+            node: SelfKind::Region(None, Mutability::Immutable, keywords::SelfValue.ident()),
+            span: DUMMY_SP,
+        }, DUMMY_SP, Mutability::Immutable),
         Arg {
           ty: P(Ty {
             id: DUMMY_NODE_ID,
@@ -622,7 +624,10 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     constness: Constness::NotConst,
     abi:       Abi::Rust,
     decl:      P(FnDecl {
-      inputs:   vec![Arg::new_self(DUMMY_SP, Mutability::Immutable, keywords::SelfValue.ident())],
+      inputs:   vec![Arg::from_self(Spanned {
+          node: SelfKind::Region(None, Mutability::Immutable, keywords::SelfValue.ident()),
+          span: DUMMY_SP,
+      }, DUMMY_SP, Mutability::Immutable)],
       output:   FunctionRetTy::Ty(str_type),
       variadic: false,
     }),
@@ -673,7 +678,10 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     constness: Constness::NotConst,
     abi:       Abi::Rust,
     decl:      P(FnDecl {
-      inputs:   vec![Arg::new_self(DUMMY_SP, Mutability::Immutable, keywords::SelfValue.ident())],
+      inputs:   vec![Arg::from_self(Spanned {
+          node: SelfKind::Region(None, Mutability::Immutable, keywords::SelfValue.ident()),
+          span: DUMMY_SP,
+      }, DUMMY_SP, Mutability::Immutable)],
       output:   FunctionRetTy::Ty(P(Ty {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,

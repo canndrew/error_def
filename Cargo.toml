@@ -1,6 +1,6 @@
 [package]
 name = "error_def"
-version = "0.3.7"
+version = "0.3.8"
 authors = ["Andrew Cann <shum@canndrew.org>"]
 description = "A Rust syntax extension for generating error-handling boilerplate code."
 documentation = "https://github.com/canndrew/error_def"
