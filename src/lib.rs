@@ -291,10 +291,16 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     abi:       Abi::Rust,
     decl:      P(FnDecl {
       inputs:  vec![
-        Arg::from_self(Spanned {
-            node: SelfKind::Region(None, Mutability::Immutable, keywords::SelfValue.ident()),
+        Arg::from_self(
+          Spanned {
+            node: SelfKind::Region(None, Mutability::Immutable),
             span: DUMMY_SP,
-        }, DUMMY_SP, Mutability::Immutable),
+          },
+          Spanned {
+            node: keywords::SelfValue.ident(),
+            span: DUMMY_SP,
+          },
+        ),
         Arg {
           ty: P(Ty {
             id: DUMMY_NODE_ID,
@@ -364,7 +370,6 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       variadic: false,
     }),
     generics: Generics::default(),
-    explicit_self: dummy_spanned(SelfKind::Region(None, Mutability::Immutable, ast::Ident::with_empty_ctxt(intern("what_is_this")))),
   };
 
   // Our actual code block for Debug::fmt.
@@ -624,15 +629,20 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     constness: Constness::NotConst,
     abi:       Abi::Rust,
     decl:      P(FnDecl {
-      inputs:   vec![Arg::from_self(Spanned {
-          node: SelfKind::Region(None, Mutability::Immutable, keywords::SelfValue.ident()),
+      inputs:   vec![Arg::from_self(
+        Spanned {
+          node: SelfKind::Region(None, Mutability::Immutable),
           span: DUMMY_SP,
-      }, DUMMY_SP, Mutability::Immutable)],
+        },
+        Spanned {
+          node: keywords::SelfValue.ident(),
+          span: DUMMY_SP,
+        },
+      )],
       output:   FunctionRetTy::Ty(str_type),
       variadic: false,
     }),
     generics: Generics::default(),
-    explicit_self: dummy_spanned(SelfKind::Region(None, Mutability::Immutable, ast::Ident::with_empty_ctxt(intern("what_is_this")))),
   };
 
   // The code for our Error::description implementation
@@ -678,10 +688,16 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
     constness: Constness::NotConst,
     abi:       Abi::Rust,
     decl:      P(FnDecl {
-      inputs:   vec![Arg::from_self(Spanned {
-          node: SelfKind::Region(None, Mutability::Immutable, keywords::SelfValue.ident()),
+      inputs:   vec![Arg::from_self(
+        Spanned {
+          node: SelfKind::Region(None, Mutability::Immutable),
           span: DUMMY_SP,
-      }, DUMMY_SP, Mutability::Immutable)],
+        },
+        Spanned {
+          node: keywords::SelfValue.ident(),
+          span: DUMMY_SP,
+        },
+      )],
       output:   FunctionRetTy::Ty(P(Ty {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,
@@ -711,7 +727,6 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
       variadic: false,
     }),
     generics: Generics::default(),
-    explicit_self: dummy_spanned(SelfKind::Region(None, Mutability::Immutable, ast::Ident::with_empty_ctxt(intern("what_is_this")))),
   };
 
   // Code for Error::cause
@@ -864,7 +879,6 @@ fn expand_error_def<'c>(cx: &mut ExtCtxt, sp: Span, type_name: ast::Ident, token
             variadic: false,
           }),
           generics:      Generics::default(),
-          explicit_self: dummy_spanned(SelfKind::Static),
         };
         let from_meth_block = P(Block {
           stmts: Vec::new(),
