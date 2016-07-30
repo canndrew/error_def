@@ -6,19 +6,19 @@ extern crate rustc;
 extern crate rustc_plugin;
 
 use syntax::codemap::{Span, spanned, DUMMY_SP, dummy_spanned, Spanned};
-use syntax::ast::{self, TokenTree, EnumDef};
+use syntax::tokenstream::{TokenTree, Delimited};
 use syntax::ext::base::{ExtCtxt, MacResult, DummyResult, SyntaxExtension, MacEager};
 use syntax::parse::token::{self, intern, Token, Lit, InternedString, DelimToken,
                            keywords};
 use syntax::parse;
 use syntax::util::small_vector::SmallVector;
-use syntax::ast::{Variant_, Visibility, VariantData, Variant, Attribute_, AttrStyle,
+use syntax::ast::{self, Variant_, Visibility, VariantData, Variant, Attribute_, AttrStyle,
                   StrStyle, LitKind, MetaItemKind, StructField, Name, Unsafety, ImplPolarity,
                   TraitRef, Ty, TyKind, ImplItem, MethodSig, FnDecl, MutTy, Mutability, FunctionRetTy,
                   SelfKind, Block, Expr, ExprKind, Arm, Pat, PatKind, ImplItemKind, Generics,
                   DUMMY_NODE_ID, BlockCheckMode, Item, ItemKind, Path, PathSegment,
-                  PathParameters, Arg, BindingMode, AngleBracketedParameterData, Delimited, StmtKind,
-                  Mac_, FieldPat, Field, Constness, Defaultness};
+                  PathParameters, Arg, BindingMode, AngleBracketedParameterData, StmtKind,
+                  Mac_, FieldPat, Field, Constness, Defaultness, EnumDef, ThinVec, Stmt};
 use syntax::abi::Abi;
 use syntax::ptr::P;
 use syntax::attr::{mk_sugared_doc_attr, mk_attr_id};
@@ -45,8 +45,6 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
 
   let mut items: Vec<P<ast::Item>> = Vec::new();
   let mut variants: Vec<VariantDef> = Vec::new();
-
-  let syn_context = type_name.ctxt;
 
   /*
    * Step 0.
@@ -377,7 +375,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     id:   DUMMY_NODE_ID,
     span: DUMMY_SP,
     node: ExprKind::Block(P(Block {
-      stmts: vec![{
+      stmts: vec![
         match v.variant.node.data {
           VariantData::Struct(ref fields, _) => {
             let mut ss = format!("{} {{{{", v.variant.node.name);
@@ -391,97 +389,107 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               ss.push_str(&format!(" {}: {{:?}}", field_name)[..]);
             }
             ss.push_str(" }} /* {} */");
-            dummy_spanned(StmtKind::Semi(P(Expr {
-              id:   DUMMY_NODE_ID,
+            Stmt {
+              id: DUMMY_NODE_ID,
               span: DUMMY_SP,
-              node: ExprKind::Mac(dummy_spanned(Mac_ {
-                path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
-                tts:  vec![
-                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
-                  TokenTree::Token(DUMMY_SP, Token::Not),
-                  TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
-                    delim: DelimToken::Paren,
-                    open_span:  DUMMY_SP,
-                    close_span: DUMMY_SP,
-                    tts: {
-                      let mut tts = vec![
-                        TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
-                        TokenTree::Token(DUMMY_SP, Token::Comma),
-                        TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(intern(&ss[..])), None)),
-                      ];
-                      for f in fields.iter() {
+              node: StmtKind::Semi(P(Expr {
+                id:   DUMMY_NODE_ID,
+                span: DUMMY_SP,
+                node: ExprKind::Mac(dummy_spanned(Mac_ {
+                  path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
+                  tts:  vec![
+                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
+                    TokenTree::Token(DUMMY_SP, Token::Not),
+                    TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
+                      delim: DelimToken::Paren,
+                      open_span:  DUMMY_SP,
+                      close_span: DUMMY_SP,
+                      tts: {
+                        let mut tts = vec![
+                          TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
+                          TokenTree::Token(DUMMY_SP, Token::Comma),
+                          TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(intern(&ss[..])), None)),
+                        ];
+                        for f in fields.iter() {
+                          tts.push(TokenTree::Token(DUMMY_SP, Token::Comma));
+                          let field_name = f.ident.unwrap();
+                          tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(field_name)));
+                        };
                         tts.push(TokenTree::Token(DUMMY_SP, Token::Comma));
-                        let field_name = f.ident.unwrap();
-                        tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(field_name)));
-                      };
-                      tts.push(TokenTree::Token(DUMMY_SP, Token::Comma));
-                      tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(keywords::SelfValue.ident())));
-                      tts
-                    },
-                  })),
-                ],
-                ctxt: syn_context
+                        tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(keywords::SelfValue.ident())));
+                        tts
+                      },
+                    })),
+                  ],
+                })),
+                attrs: ThinVec::new(),
               })),
-              attrs: None,
-            }), DUMMY_NODE_ID))
+            }
           },
           VariantData::Tuple(..) => unreachable!(),
           VariantData::Unit(_) => {
             let ss = format!("{} /* {{}} */", v.variant.node.name);
-            dummy_spanned(StmtKind::Semi(P(Expr {
-              id:   DUMMY_NODE_ID,
+            Stmt {
+              id: DUMMY_NODE_ID,
               span: DUMMY_SP,
-              node: ExprKind::Mac(dummy_spanned(Mac_ {
-                path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
-                tts: vec![
-                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
-                  TokenTree::Token(DUMMY_SP, Token::Not),
-                  TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
-                    delim: DelimToken::Paren,
-                    open_span:  DUMMY_SP,
-                    close_span: DUMMY_SP,
-                    tts: vec![
-                      TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
-                      TokenTree::Token(DUMMY_SP, Token::Comma),
-                      TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(intern(&ss[..])), None)),
-                      TokenTree::Token(DUMMY_SP, Token::Comma),
-                      TokenTree::Token(DUMMY_SP, Token::Ident(keywords::SelfValue.ident())),
-                    ],
-                  })),
-                ],
-                ctxt: syn_context
+              node: StmtKind::Semi(P(Expr {
+                id:   DUMMY_NODE_ID,
+                span: DUMMY_SP,
+                node: ExprKind::Mac(dummy_spanned(Mac_ {
+                  path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
+                  tts: vec![
+                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
+                    TokenTree::Token(DUMMY_SP, Token::Not),
+                    TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
+                      delim: DelimToken::Paren,
+                      open_span:  DUMMY_SP,
+                      close_span: DUMMY_SP,
+                      tts: vec![
+                        TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
+                        TokenTree::Token(DUMMY_SP, Token::Comma),
+                        TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(intern(&ss[..])), None)),
+                        TokenTree::Token(DUMMY_SP, Token::Comma),
+                        TokenTree::Token(DUMMY_SP, Token::Ident(keywords::SelfValue.ident())),
+                      ],
+                    })),
+                  ],
+                })),
+                attrs: ThinVec::new(),
               })),
-              attrs: None,
-            }), DUMMY_NODE_ID))
+            }
           }
-        }
-      }],
-      expr: Some(P(Expr {
-        id:   DUMMY_NODE_ID,
-        span: DUMMY_SP,
-        node: ExprKind::Call(
-          P(Expr {
-            id:    DUMMY_NODE_ID,
-            span:  DUMMY_SP,
-            node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("Ok"))])),
-            attrs: None,
-          }),
-          vec![
-            P(Expr {
-              id:    DUMMY_NODE_ID,
-              span:  DUMMY_SP,
-              node:  ExprKind::Tup(Vec::new()),
-              attrs: None,
-            }),
-          ]
-        ),
-        attrs: None,
-      })),
+        },
+        Stmt {
+          id: DUMMY_NODE_ID,
+          span: DUMMY_SP,
+          node: StmtKind::Expr(P(Expr {
+            id:   DUMMY_NODE_ID,
+            span: DUMMY_SP,
+            node: ExprKind::Call(
+              P(Expr {
+                id:    DUMMY_NODE_ID,
+                span:  DUMMY_SP,
+                node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("Ok"))])),
+                attrs: ThinVec::new(),
+              }),
+              vec![
+                P(Expr {
+                  id:    DUMMY_NODE_ID,
+                  span:  DUMMY_SP,
+                  node:  ExprKind::Tup(Vec::new()),
+                  attrs: ThinVec::new(),
+                }),
+              ]
+            ),
+            attrs: ThinVec::new(),
+          })),
+        },
+      ],
       id:    DUMMY_NODE_ID,
       span:  DUMMY_SP,
       rules: BlockCheckMode::Default,
     })),
-    attrs: None,
+    attrs: ThinVec::new(),
   }));
 
   // The AST for the method implementation of Debug::fmt
@@ -502,114 +510,127 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     node: ExprKind::Block(P(Block {
       stmts: {
         let mut try_writes = vec![
-          dummy_spanned(StmtKind::Semi(P(Expr {
-            id:   DUMMY_NODE_ID,
+          Stmt {
+            id: DUMMY_NODE_ID,
             span: DUMMY_SP,
-            node: ExprKind::Mac(dummy_spanned(Mac_ {
-              path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
-              tts: vec![
-                TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
-                TokenTree::Token(DUMMY_SP, Token::Not),
-                TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
-                  delim: DelimToken::Paren,
-                  open_span:  DUMMY_SP,
-                  close_span: DUMMY_SP,
-                  tts: vec![
-                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
-                    TokenTree::Token(DUMMY_SP, Token::Comma),
-                    TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(v.short_description), None)),
-                  ],
-                })),
-              ],
-              ctxt: syn_context
-            })),
-            attrs: None,
-          }), DUMMY_NODE_ID)),
-          dummy_spanned(StmtKind::Semi(P(Expr {
-            id:   DUMMY_NODE_ID,
-            span: DUMMY_SP,
-            node: ExprKind::Mac(dummy_spanned(Mac_ {
-              path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
-              tts: vec![
-                TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
-                TokenTree::Token(DUMMY_SP, Token::Not),
-                TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
-                  delim: DelimToken::Paren,
-                  open_span:  DUMMY_SP,
-                  close_span: DUMMY_SP,
-                  tts: vec![
-                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
-                    TokenTree::Token(DUMMY_SP, Token::Comma),
-                    TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(intern(". ")), None)),
-                  ],
-                })),
-              ],
-              ctxt: syn_context
-            })),
-            attrs: None,
-          }), DUMMY_NODE_ID)),
-        ];
-        if let Some(ref long_desc) = v.long_description {
-          try_writes.push(dummy_spanned(StmtKind::Semi(P(Expr {
-            id:   DUMMY_NODE_ID,
-            span: DUMMY_SP,
-            node: ExprKind::Mac(dummy_spanned(Mac_ {
-              path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
-              tts: vec![
-                TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
-                TokenTree::Token(DUMMY_SP, Token::Not),
-                TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
-                  delim: DelimToken::Paren,
-                  open_span:  DUMMY_SP,
-                  close_span: DUMMY_SP,
-                  tts: {
-                    let mut write_args = vec![
+            node: StmtKind::Semi(P(Expr {
+              id:   DUMMY_NODE_ID,
+              span: DUMMY_SP,
+              node: ExprKind::Mac(dummy_spanned(Mac_ {
+                path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
+                tts: vec![
+                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
+                  TokenTree::Token(DUMMY_SP, Token::Not),
+                  TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
+                    delim: DelimToken::Paren,
+                    open_span:  DUMMY_SP,
+                    close_span: DUMMY_SP,
+                    tts: vec![
                       TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
                       TokenTree::Token(DUMMY_SP, Token::Comma),
-                      TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(long_desc.format_str), None)),
-                    ];
-                    for fa in long_desc.format_args.iter() {
-                      write_args.push(TokenTree::Token(DUMMY_SP, Token::Comma));
-                      let tt = fa.to_tokens(cx);
-                      write_args.extend(tt);
-                    };
-                    write_args
-                  },
-                })),
-              ],
-              ctxt: syn_context
+                      TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(v.short_description), None)),
+                    ],
+                  })),
+                ],
+              })),
+              attrs: ThinVec::new(),
             })),
-            attrs: None,
-          }), DUMMY_NODE_ID)));
+          },
+          Stmt {
+            id: DUMMY_NODE_ID,
+            span: DUMMY_SP,
+            node: StmtKind::Semi(P(Expr {
+              id:   DUMMY_NODE_ID,
+              span: DUMMY_SP,
+              node: ExprKind::Mac(dummy_spanned(Mac_ {
+                path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
+                tts: vec![
+                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
+                  TokenTree::Token(DUMMY_SP, Token::Not),
+                  TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
+                    delim: DelimToken::Paren,
+                    open_span:  DUMMY_SP,
+                    close_span: DUMMY_SP,
+                    tts: vec![
+                      TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
+                      TokenTree::Token(DUMMY_SP, Token::Comma),
+                      TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(intern(". ")), None)),
+                    ],
+                  })),
+                ],
+              })),
+              attrs: ThinVec::new(),
+            })),
+          }
+        ];
+        if let Some(ref long_desc) = v.long_description {
+          try_writes.push(Stmt {
+            id: DUMMY_NODE_ID,
+            span: DUMMY_SP,
+            node: StmtKind::Semi(P(Expr {
+              id:   DUMMY_NODE_ID,
+              span: DUMMY_SP,
+              node: ExprKind::Mac(dummy_spanned(Mac_ {
+                path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("try"))]),
+                tts: vec![
+                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("write")))),
+                  TokenTree::Token(DUMMY_SP, Token::Not),
+                  TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
+                    delim: DelimToken::Paren,
+                    open_span:  DUMMY_SP,
+                    close_span: DUMMY_SP,
+                    tts: {
+                      let mut write_args = vec![
+                        TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(intern("f")))),
+                        TokenTree::Token(DUMMY_SP, Token::Comma),
+                        TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(long_desc.format_str), None)),
+                      ];
+                      for fa in long_desc.format_args.iter() {
+                        write_args.push(TokenTree::Token(DUMMY_SP, Token::Comma));
+                        let tt = fa.to_tokens(cx);
+                        write_args.extend(tt);
+                      };
+                      write_args
+                    },
+                  })),
+                ],
+              })),
+              attrs: ThinVec::new(),
+            })),
+          });
         };
+        try_writes.push(Stmt {
+          id: DUMMY_NODE_ID,
+          span: DUMMY_SP,
+          node: StmtKind::Expr(P(Expr {
+            id:   DUMMY_NODE_ID,
+            span: DUMMY_SP,
+            node: ExprKind::Call(
+              P(Expr {
+                id:    DUMMY_NODE_ID,
+                span:  DUMMY_SP,
+                node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("Ok"))])),
+                attrs: ThinVec::new(),
+              }),
+              vec![
+                P(Expr {
+                  id:    DUMMY_NODE_ID,
+                  span:  DUMMY_SP,
+                  node:  ExprKind::Tup(Vec::new()),
+                  attrs: ThinVec::new(),
+                }),
+              ]
+            ),
+            attrs: ThinVec::new(),
+          })),
+        });
         try_writes
       },
-      expr: Some(P(Expr {
-        id:   DUMMY_NODE_ID,
-        span: DUMMY_SP,
-        node: ExprKind::Call(
-          P(Expr {
-            id:    DUMMY_NODE_ID,
-            span:  DUMMY_SP,
-            node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("Ok"))])),
-            attrs: None,
-          }),
-          vec![
-            P(Expr {
-              id:    DUMMY_NODE_ID,
-              span:  DUMMY_SP,
-              node:  ExprKind::Tup(Vec::new()),
-              attrs: None,
-            }),
-          ]
-        ),
-        attrs: None,
-      })),
       id:    DUMMY_NODE_ID,
       span:  DUMMY_SP,
       rules: BlockCheckMode::Default,
     })),
-    attrs: None,
+    attrs: ThinVec::new(),
   }));
 
   // The method impl for Display::fmt
@@ -650,7 +671,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     id:    DUMMY_NODE_ID,
     span:  DUMMY_SP,
     node:  ExprKind::Lit(P(dummy_spanned(LitKind::Str(InternedString::new_from_name(v.short_description), StrStyle::Cooked)))),
-    attrs: None,
+    attrs: ThinVec::new(),
   }));
 
   // The method implementation of Error::description
@@ -743,7 +764,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
           ast::Ident::with_empty_ctxt(intern("Option")),
           ast::Ident::with_empty_ctxt(intern("Some")),
         ])),
-        attrs: None,
+        attrs: ThinVec::new(),
       }), vec![P(Expr {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,
@@ -757,9 +778,9 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               VariantData::Unit(_)   => unreachable!(),
             },
           ])),
-          attrs: None,
+          attrs: ThinVec::new(),
         }), ref_error_ty.clone()),
-        attrs: None,
+        attrs: ThinVec::new(),
       })]),
       None    => ExprKind::Path(None, path_from_segments(true, &[
         ast::Ident::with_empty_ctxt(intern("std")),
@@ -768,7 +789,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
         ast::Ident::with_empty_ctxt(intern("None")),
       ])),
     },
-    attrs: None,
+    attrs: ThinVec::new(),
   }));
 
   // The method impl for Error::cause
@@ -881,26 +902,29 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
           generics:      Generics::default(),
         };
         let from_meth_block = P(Block {
-          stmts: Vec::new(),
-          expr:  Some(P(Expr {
-            id:   DUMMY_NODE_ID,
+          stmts: vec![Stmt {
+            id: DUMMY_NODE_ID,
             span: DUMMY_SP,
-            node: ExprKind::Struct(
-              path_from_segments(false, &[type_name, v.variant.node.name]),
-              vec![Field {
-                ident: dummy_spanned(field.ident.unwrap()),
-                expr: P(Expr {
-                  node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("e"))])),
-                  id:    DUMMY_NODE_ID,
-                  span:  DUMMY_SP,
-                  attrs: None,
-                }),
-                span: DUMMY_SP,
-              }],
-              None,
-            ),
-            attrs: None,
-          })),
+            node: StmtKind::Expr(P(Expr {
+              id:   DUMMY_NODE_ID,
+              span: DUMMY_SP,
+              node: ExprKind::Struct(
+                path_from_segments(false, &[type_name, v.variant.node.name]),
+                vec![Field {
+                  ident: dummy_spanned(field.ident.unwrap()),
+                  expr: P(Expr {
+                    node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("e"))])),
+                    id:    DUMMY_NODE_ID,
+                    span:  DUMMY_SP,
+                    attrs: ThinVec::new(),
+                  }),
+                  span: DUMMY_SP,
+                }],
+                None,
+              ),
+              attrs: ThinVec::new(),
+            })),
+          }],
           id:    DUMMY_NODE_ID,
           rules: BlockCheckMode::Default,
           span:  DUMMY_SP,
@@ -990,76 +1014,80 @@ fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F)
     id:    DUMMY_NODE_ID,
     node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(intern("self"))])),
     span:  DUMMY_SP,
-    attrs: None,
+    attrs: ThinVec::new(),
   });
 
   P(Block {
-    stmts: Vec::new(),
-    expr:  Some(P(Expr {
-      id:   DUMMY_NODE_ID,
-      node: ExprKind::Match(
-        expr_self,
-        {
-          let mut arms: Vec<Arm> = Vec::new();
-          for v in variants {
-            arms.push(Arm {
-              attrs: Vec::new(),
-              pats:  vec![P(Pat {
-                id:   DUMMY_NODE_ID,
-                span: DUMMY_SP,
-                node: PatKind::Ref(
-                  P(Pat {
-                    id: DUMMY_NODE_ID,
-                    node: match v.variant.node.data {
-                      VariantData::Struct(ref fields, _)  => PatKind::Struct(
-                        path_from_segments(false, &[type_name, v.variant.node.name]),
-                        {
-                          let mut pat_fields: Vec<Spanned<FieldPat>> = Vec::new();
-                          for field in fields.iter() {
-                            pat_fields.push(dummy_spanned(FieldPat {
-                              ident: field.ident.unwrap(),
-                              pat:  P(Pat {
-                                id:   DUMMY_NODE_ID,
-                                span: DUMMY_SP,
-                                node: PatKind::Ident(
-                                  BindingMode::ByRef(Mutability::Immutable),
-                                  dummy_spanned(field.ident.unwrap()),
-                                  None
-                                ),
-                              }),
-                              is_shorthand: true,
-                            }))
-                          };
-                          pat_fields
-                        },
-                        false,
-                      ),
-                      VariantData::Tuple(..) => unreachable!(),
-                      VariantData::Unit(_) => PatKind::Path(
-                        path_from_segments(false, &[type_name, v.variant.node.name])
-                      ),
-                      /*
-                      VariantData::Unit(_) => PatKind::Enum(
-                        path_from_segments(false, &[type_name, v.variant.node.name]),
-                        None,
-                      ),
-                      */
-                    },
-                    span: DUMMY_SP,
-                  }),
-                  Mutability::Immutable,
-                ),
-              })],
-              guard: None,
-              body: func(v),
-            });
-          };
-          arms
-        }
-      ),
+    stmts: vec![Stmt {
+      id: DUMMY_NODE_ID,
       span: DUMMY_SP,
-      attrs: None,
-    })),
+      node: StmtKind::Expr(P(Expr {
+        id:   DUMMY_NODE_ID,
+        node: ExprKind::Match(
+          expr_self,
+          {
+            let mut arms: Vec<Arm> = Vec::new();
+            for v in variants {
+              arms.push(Arm {
+                attrs: Vec::new(),
+                pats:  vec![P(Pat {
+                  id:   DUMMY_NODE_ID,
+                  span: DUMMY_SP,
+                  node: PatKind::Ref(
+                    P(Pat {
+                      id: DUMMY_NODE_ID,
+                      node: match v.variant.node.data {
+                        VariantData::Struct(ref fields, _)  => PatKind::Struct(
+                          path_from_segments(false, &[type_name, v.variant.node.name]),
+                          {
+                            let mut pat_fields: Vec<Spanned<FieldPat>> = Vec::new();
+                            for field in fields.iter() {
+                              pat_fields.push(dummy_spanned(FieldPat {
+                                ident: field.ident.unwrap(),
+                                pat:  P(Pat {
+                                  id:   DUMMY_NODE_ID,
+                                  span: DUMMY_SP,
+                                  node: PatKind::Ident(
+                                    BindingMode::ByRef(Mutability::Immutable),
+                                    dummy_spanned(field.ident.unwrap()),
+                                    None
+                                  ),
+                                }),
+                                is_shorthand: true,
+                              }))
+                            };
+                            pat_fields
+                          },
+                          false,
+                        ),
+                        VariantData::Tuple(..) => unreachable!(),
+                        VariantData::Unit(_) => PatKind::Path(
+                          None,
+                          path_from_segments(false, &[type_name, v.variant.node.name])
+                        ),
+                        /*
+                        VariantData::Unit(_) => PatKind::Enum(
+                          path_from_segments(false, &[type_name, v.variant.node.name]),
+                          None,
+                        ),
+                        */
+                      },
+                      span: DUMMY_SP,
+                    }),
+                    Mutability::Immutable,
+                  ),
+                })],
+                guard: None,
+                body: func(v),
+              });
+            };
+            arms
+          }
+        ),
+        span: DUMMY_SP,
+        attrs: ThinVec::new(),
+      })),
+    }],
     id:    DUMMY_NODE_ID,
     rules: BlockCheckMode::Default,
     span:  DUMMY_SP,
