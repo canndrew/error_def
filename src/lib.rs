@@ -119,7 +119,9 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
           };
 
           // Parse the name and type of the member.
-          let sf = match parser.parse_single_struct_field(Visibility::Inherited, attrs) {
+          let sf = match parser.parse_single_struct_field(DUMMY_SP.lo,
+                                                          Visibility::Inherited,
+                                                          attrs) {
             Ok(sf)  => sf,
             Err(_)  => {
               let _ = parser.fatal("Expected struct field");
