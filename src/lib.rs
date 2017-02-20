@@ -42,7 +42,7 @@ struct VariantDef {
 }
 
 fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, tokens: Vec<TokenTree>) -> Box<MacResult + 'c> {
-  let mut parser = parse::tts_to_parser(cx.parse_sess(), tokens, cx.cfg());
+  let mut parser = parse::tts_to_parser(cx.parse_sess(), tokens);
 
   let mut items: Vec<P<ast::Item>> = Vec::new();
   let mut variants: Vec<VariantDef> = Vec::new();
@@ -922,6 +922,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                     attrs: ThinVec::new(),
                   }),
                   span: DUMMY_SP,
+                  is_shorthand: false,
                 }],
                 None,
               ),
