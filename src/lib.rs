@@ -18,7 +18,8 @@ use syntax::ast::{self, Variant_, Visibility, VariantData, Variant, Attribute_, 
                   SelfKind, Block, Expr, ExprKind, Arm, Pat, PatKind, ImplItemKind, Generics,
                   DUMMY_NODE_ID, BlockCheckMode, Item, ItemKind, Path, PathSegment,
                   PathParameters, Arg, BindingMode, AngleBracketedParameterData, StmtKind,
-                  Mac_, FieldPat, Field, Constness, Defaultness, EnumDef, ThinVec, Stmt};
+                  Mac_, FieldPat, Field, Constness, Defaultness, EnumDef, ThinVec, Stmt,
+                  NestedMetaItemKind};
 use syntax::abi::Abi;
 use syntax::ptr::P;
 use syntax::attr::{mk_sugared_doc_attr, mk_attr_id};
@@ -279,7 +280,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     style: AttrStyle::Outer,
     value: P(dummy_spanned(MetaItemKind::List(
       InternedString::new_from_name(intern("allow")),
-      vec![P(dummy_spanned(MetaItemKind::Word(InternedString::new_from_name(intern("unused_variables")))))]
+      vec![dummy_spanned(NestedMetaItemKind::MetaItem(P(dummy_spanned(MetaItemKind::Word(InternedString::new_from_name(intern("unused_variables")))))))]
     ))),
     is_sugared_doc: false,
   });
@@ -287,7 +288,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
   // Create an AST of the method signature of fmt::Display::fmt and fmt::Debug::fmt.
   let fmt_meth_sig = MethodSig {
     unsafety:  Unsafety::Normal,
-    constness: Constness::NotConst,
+    constness: dummy_spanned(Constness::NotConst),
     abi:       Abi::Rust,
     decl:      P(FnDecl {
       inputs:  vec![
@@ -649,7 +650,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
   // AST of the method signature for Error::description
   let description_meth_sig = MethodSig {
     unsafety:  Unsafety::Normal,
-    constness: Constness::NotConst,
+    constness: dummy_spanned(Constness::NotConst),
     abi:       Abi::Rust,
     decl:      P(FnDecl {
       inputs:   vec![Arg::from_self(
@@ -708,7 +709,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
   // AST of the method signature for Error::cause
   let cause_meth_sig = MethodSig {
     unsafety:  Unsafety::Normal,
-    constness: Constness::NotConst,
+    constness: dummy_spanned(Constness::NotConst),
     abi:       Abi::Rust,
     decl:      P(FnDecl {
       inputs:   vec![Arg::from_self(
@@ -882,7 +883,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
         let field = &fields[0];
         let from_meth_sig = MethodSig {
           unsafety:      Unsafety::Normal,
-          constness:     Constness::NotConst,
+          constness:     dummy_spanned(Constness::NotConst),
           abi:           Abi::Rust,
           decl:          P(FnDecl {
             inputs: vec![Arg {
