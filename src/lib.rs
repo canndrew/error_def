@@ -267,7 +267,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     node: TyKind::Rptr(None, MutTy {
       ty: P(Ty {
         id: DUMMY_NODE_ID,
-        node: TyKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(Symbol::intern("str"))])),
+        node: TyKind::Path(None, path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("str"))])),
         span: DUMMY_SP,
       }),
       mutbl: Mutability::Immutable,
@@ -315,7 +315,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
             node: TyKind::Rptr(None, MutTy {
               ty: P(Ty {
                 id:   DUMMY_NODE_ID,
-                node: TyKind::Path(None, path_from_segments(true, &[
+                node: TyKind::Path(None, path_from_segments(&[
+                  keywords::CrateRoot.ident(),
                   ast::Ident::with_empty_ctxt(Symbol::intern("std")),
                   ast::Ident::with_empty_ctxt(Symbol::intern("fmt")),
                   ast::Ident::with_empty_ctxt(Symbol::intern("Formatter")),
@@ -339,19 +340,22 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
         span: DUMMY_SP,
         node: TyKind::Path(None, Path {
           span: DUMMY_SP,
-          global: true,
           segments: vec![
             PathSegment {
+              identifier: keywords::CrateRoot.ident(),
+              parameters: None,
+            },
+            PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("std")),
-              parameters: PathParameters::none(),
+              parameters: None,
             },
             PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("result")),
-              parameters: PathParameters::none(),
+              parameters: None,
             },
             PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("Result")),
-              parameters: PathParameters::AngleBracketed(AngleBracketedParameterData {
+              parameters: Some(P(PathParameters::AngleBracketed(AngleBracketedParameterData {
                 lifetimes: Vec::new(),
                 types:     P::from_vec(vec![
                   P(Ty {
@@ -362,7 +366,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                   P(Ty {
                     id:   DUMMY_NODE_ID,
                     span: DUMMY_SP,
-                    node: TyKind::Path(None, path_from_segments(true, &[
+                    node: TyKind::Path(None, path_from_segments(&[
+                      keywords::CrateRoot.ident(),
                       ast::Ident::with_empty_ctxt(Symbol::intern("std")),
                       ast::Ident::with_empty_ctxt(Symbol::intern("fmt")),
                       ast::Ident::with_empty_ctxt(Symbol::intern("Error")),
@@ -370,7 +375,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                   })
                 ]),
                 bindings:  P::new(),
-              }),
+              }))),
             },
           ],
         }),
@@ -406,7 +411,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                 id:   DUMMY_NODE_ID,
                 span: DUMMY_SP,
                 node: ExprKind::Mac(dummy_spanned(Mac_ {
-                  path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
+                  path: path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
                   tts:  vec![
                     TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
                     TokenTree::Token(DUMMY_SP, Token::Not),
@@ -446,7 +451,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                 id:   DUMMY_NODE_ID,
                 span: DUMMY_SP,
                 node: ExprKind::Mac(dummy_spanned(Mac_ {
-                  path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
+                  path: path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
                   tts: vec![
                     TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
                     TokenTree::Token(DUMMY_SP, Token::Not),
@@ -479,7 +484,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               P(Expr {
                 id:    DUMMY_NODE_ID,
                 span:  DUMMY_SP,
-                node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(Symbol::intern("Ok"))])),
+                node:  ExprKind::Path(None, path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("Ok"))])),
                 attrs: ThinVec::new(),
               }),
               vec![
@@ -527,7 +532,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               id:   DUMMY_NODE_ID,
               span: DUMMY_SP,
               node: ExprKind::Mac(dummy_spanned(Mac_ {
-                path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
+                path: path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
                 tts: vec![
                   TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
                   TokenTree::Token(DUMMY_SP, Token::Not),
@@ -553,7 +558,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               id:   DUMMY_NODE_ID,
               span: DUMMY_SP,
               node: ExprKind::Mac(dummy_spanned(Mac_ {
-                path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
+                path: path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
                 tts: vec![
                   TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
                   TokenTree::Token(DUMMY_SP, Token::Not),
@@ -581,7 +586,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               id:   DUMMY_NODE_ID,
               span: DUMMY_SP,
               node: ExprKind::Mac(dummy_spanned(Mac_ {
-                path: path_from_segments(false, &[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
+                path: path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
                 tts: vec![
                   TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
                   TokenTree::Token(DUMMY_SP, Token::Not),
@@ -619,7 +624,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               P(Expr {
                 id:    DUMMY_NODE_ID,
                 span:  DUMMY_SP,
-                node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(Symbol::intern("Ok"))])),
+                node:  ExprKind::Path(None, path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("Ok"))])),
                 attrs: ThinVec::new(),
               }),
               vec![
@@ -701,7 +706,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
       ty: P(Ty {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,
-        node: TyKind::Path(None, path_from_segments(true, &[
+        node: TyKind::Path(None, path_from_segments(&[
+          keywords::CrateRoot.ident(),
           ast::Ident::with_empty_ctxt(Symbol::intern("std")),
           ast::Ident::with_empty_ctxt(Symbol::intern("error")),
           ast::Ident::with_empty_ctxt(Symbol::intern("Error")),
@@ -734,23 +740,26 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
         span: DUMMY_SP,
         node: TyKind::Path(None, Path {
           span:   DUMMY_SP,
-          global: true,
           segments: vec![
             PathSegment {
+              identifier: keywords::CrateRoot.ident(),
+              parameters: None,
+            },
+            PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("std")),
-              parameters: PathParameters::none(),
+              parameters: None,
             },
             PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("option")),
-              parameters: PathParameters::none(),
+              parameters: None,
             },
             PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("Option")),
-              parameters: PathParameters::AngleBracketed(AngleBracketedParameterData {
+              parameters: Some(P(PathParameters::AngleBracketed(AngleBracketedParameterData {
                 lifetimes: Vec::new(),
                 types:     P::from_vec(vec![ref_error_ty.clone()]),
                 bindings:  P::new(),
-              }),
+              }))),
             },
           ],
         }),
@@ -768,7 +777,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
       Some(i) => ExprKind::Call(P(Expr {
         id:   DUMMY_NODE_ID,
         span: DUMMY_SP,
-        node: ExprKind::Path(None, path_from_segments(true, &[
+        node: ExprKind::Path(None, path_from_segments(&[
+          keywords::CrateRoot.ident(),
           ast::Ident::with_empty_ctxt(Symbol::intern("std")),
           ast::Ident::with_empty_ctxt(Symbol::intern("option")),
           ast::Ident::with_empty_ctxt(Symbol::intern("Option")),
@@ -781,7 +791,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
         node: ExprKind::Cast(P(Expr {
           id:   DUMMY_NODE_ID,
           span: DUMMY_SP,
-          node: ExprKind::Path(None, path_from_segments(false, &[
+          node: ExprKind::Path(None, path_from_segments(&[
             match v.variant.node.data {
               VariantData::Struct(ref fields, _) => fields[i].ident.unwrap(),
               VariantData::Tuple(..) => unreachable!(),
@@ -792,7 +802,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
         }), ref_error_ty.clone()),
         attrs: ThinVec::new(),
       })]),
-      None    => ExprKind::Path(None, path_from_segments(true, &[
+      None    => ExprKind::Path(None, path_from_segments(&[
+        keywords::CrateRoot.ident(),
         ast::Ident::with_empty_ctxt(Symbol::intern("std")),
         ast::Ident::with_empty_ctxt(Symbol::intern("option")),
         ast::Ident::with_empty_ctxt(Symbol::intern("Option")),
@@ -819,7 +830,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     attrs: Vec::new(),
     id:    DUMMY_NODE_ID,
     node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
-      path:   path_from_segments(true, &[
+      path:   path_from_segments(&[
+        keywords::CrateRoot.ident(),
         ast::Ident::with_empty_ctxt(Symbol::intern("std")),
         ast::Ident::with_empty_ctxt(Symbol::intern("fmt")),
         ast::Ident::with_empty_ctxt(Symbol::intern("Debug"))
@@ -827,7 +839,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
       ref_id: DUMMY_NODE_ID,
     }), P(Ty {
       id:   DUMMY_NODE_ID,
-      node: TyKind::Path(None, path_from_segments(false, &[type_name])),
+      node: TyKind::Path(None, path_from_segments(&[type_name])),
       span: DUMMY_SP,
     }), vec![
       debug_fmt_impl,
@@ -842,7 +854,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     attrs: Vec::new(),
     id:    DUMMY_NODE_ID,
     node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
-      path:   path_from_segments(true, &[
+      path:   path_from_segments(&[
+        keywords::CrateRoot.ident(),
         ast::Ident::with_empty_ctxt(Symbol::intern("std")),
         ast::Ident::with_empty_ctxt(Symbol::intern("fmt")),
         ast::Ident::with_empty_ctxt(Symbol::intern("Display"))
@@ -850,7 +863,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
       ref_id: DUMMY_NODE_ID,
     }), P(Ty {
       id:   DUMMY_NODE_ID,
-      node: TyKind::Path(None, path_from_segments(false, &[type_name])),
+      node: TyKind::Path(None, path_from_segments(&[type_name])),
       span: DUMMY_SP,
     }), vec![
       display_fmt_impl,
@@ -865,7 +878,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     attrs: Vec::new(),
     id:    DUMMY_NODE_ID,
     node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
-      path:   path_from_segments(true, &[
+      path:   path_from_segments(&[
+        keywords::CrateRoot.ident(),
         ast::Ident::with_empty_ctxt(Symbol::intern("std")),
         ast::Ident::with_empty_ctxt(Symbol::intern("error")),
         ast::Ident::with_empty_ctxt(Symbol::intern("Error"))
@@ -873,7 +887,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
       ref_id: DUMMY_NODE_ID,
     }), P(Ty {
       id:   DUMMY_NODE_ID,
-      node: TyKind::Path(None, path_from_segments(false, &[type_name])),
+      node: TyKind::Path(None, path_from_segments(&[type_name])),
       span: DUMMY_SP,
     }), vec![
       description_impl,
@@ -905,7 +919,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
             output: FunctionRetTy::Ty(P(Ty {
               id:   DUMMY_NODE_ID,
               span: DUMMY_SP,
-              node: TyKind::Path(None, path_from_segments(false, &[type_name])),
+              node: TyKind::Path(None, path_from_segments(&[type_name])),
             })),
             variadic: false,
           }),
@@ -919,11 +933,11 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               id:   DUMMY_NODE_ID,
               span: DUMMY_SP,
               node: ExprKind::Struct(
-                path_from_segments(false, &[type_name, v.variant.node.name]),
+                path_from_segments(&[type_name, v.variant.node.name]),
                 vec![Field {
                   ident: dummy_spanned(field.ident.unwrap()),
                   expr: P(Expr {
-                    node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(Symbol::intern("e"))])),
+                    node:  ExprKind::Path(None, path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("e"))])),
                     id:    DUMMY_NODE_ID,
                     span:  DUMMY_SP,
                     attrs: ThinVec::new(),
@@ -957,30 +971,33 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
           node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
             path:   Path {
               span:   DUMMY_SP,
-              global: true,
               segments: vec![
                 PathSegment {
+                  identifier: keywords::CrateRoot.ident(),
+                  parameters: None,
+                },
+                PathSegment {
                   identifier: ast::Ident::with_empty_ctxt(Symbol::intern("std")),
-                  parameters: PathParameters::none(),
+                  parameters: None,
                 },
                 PathSegment {
                   identifier: ast::Ident::with_empty_ctxt(Symbol::intern("convert")),
-                  parameters: PathParameters::none(),
+                  parameters: None,
                 },
                 PathSegment {
                   identifier: ast::Ident::with_empty_ctxt(Symbol::intern("From")),
-                  parameters: PathParameters::AngleBracketed(AngleBracketedParameterData {
+                  parameters: Some(P(PathParameters::AngleBracketed(AngleBracketedParameterData {
                     lifetimes: Vec::new(),
                     types:     P::from_vec(vec![field.ty.clone()]),
                     bindings:  P::new(),
-                  }),
+                  }))),
                 },
               ],
             },
             ref_id: DUMMY_NODE_ID,
           }), P(Ty {
             id:   DUMMY_NODE_ID,
-            node: TyKind::Path(None, path_from_segments(false, &[type_name])),
+            node: TyKind::Path(None, path_from_segments(&[type_name])),
             span: DUMMY_SP,
           }), vec![
             from_meth_impl,
@@ -1003,13 +1020,12 @@ pub fn plugin_registrar(reg: &mut Registry) {
 // helper method for generating a Path from a slice of idents
 //
 // eg. ["std", "convert", "From"] => std::convert::From
-fn path_from_segments(global: bool, segments: &[ast::Ident]) -> Path {
+fn path_from_segments(segments: &[ast::Ident]) -> Path {
   Path {
     span:   DUMMY_SP,
-    global: global,
     segments: segments.iter().map(|i| PathSegment {
       identifier: *i,
-      parameters: PathParameters::none()
+      parameters: None,
     }).collect(),
   }
 }
@@ -1023,7 +1039,7 @@ fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F)
 {
   let expr_self = P(Expr {
     id:    DUMMY_NODE_ID,
-    node:  ExprKind::Path(None, path_from_segments(false, &[ast::Ident::with_empty_ctxt(Symbol::intern("self"))])),
+    node:  ExprKind::Path(None, path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("self"))])),
     span:  DUMMY_SP,
     attrs: ThinVec::new(),
   });
@@ -1049,7 +1065,7 @@ fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F)
                       id: DUMMY_NODE_ID,
                       node: match v.variant.node.data {
                         VariantData::Struct(ref fields, _)  => PatKind::Struct(
-                          path_from_segments(false, &[type_name, v.variant.node.name]),
+                          path_from_segments(&[type_name, v.variant.node.name]),
                           {
                             let mut pat_fields: Vec<Spanned<FieldPat>> = Vec::new();
                             for field in fields.iter() {
@@ -1074,11 +1090,11 @@ fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F)
                         VariantData::Tuple(..) => unreachable!(),
                         VariantData::Unit(_) => PatKind::Path(
                           None,
-                          path_from_segments(false, &[type_name, v.variant.node.name])
+                          path_from_segments(&[type_name, v.variant.node.name])
                         ),
                         /*
                         VariantData::Unit(_) => PatKind::Enum(
-                          path_from_segments(false, &[type_name, v.variant.node.name]),
+                          path_from_segments(&[type_name, v.variant.node.name]),
                           None,
                         ),
                         */
