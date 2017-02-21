@@ -357,7 +357,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("Result")),
               parameters: Some(P(PathParameters::AngleBracketed(AngleBracketedParameterData {
                 lifetimes: Vec::new(),
-                types:     P::from_vec(vec![
+                types:     vec![
                   P(Ty {
                     id:   DUMMY_NODE_ID,
                     span: DUMMY_SP,
@@ -373,8 +373,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                       ast::Ident::with_empty_ctxt(Symbol::intern("Error")),
                     ])),
                   })
-                ]),
-                bindings:  P::new(),
+                ],
+                bindings:  vec![],
               }))),
             },
           ],
@@ -417,8 +417,6 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                     TokenTree::Token(DUMMY_SP, Token::Not),
                     TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
                       delim: DelimToken::Paren,
-                      open_span:  DUMMY_SP,
-                      close_span: DUMMY_SP,
                       tts: {
                         let mut tts = vec![
                           TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
@@ -457,8 +455,6 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                     TokenTree::Token(DUMMY_SP, Token::Not),
                     TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
                       delim: DelimToken::Paren,
-                      open_span:  DUMMY_SP,
-                      close_span: DUMMY_SP,
                       tts: vec![
                         TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
                         TokenTree::Token(DUMMY_SP, Token::Comma),
@@ -538,8 +534,6 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                   TokenTree::Token(DUMMY_SP, Token::Not),
                   TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
                     delim: DelimToken::Paren,
-                    open_span:  DUMMY_SP,
-                    close_span: DUMMY_SP,
                     tts: vec![
                       TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
                       TokenTree::Token(DUMMY_SP, Token::Comma),
@@ -564,8 +558,6 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                   TokenTree::Token(DUMMY_SP, Token::Not),
                   TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
                     delim: DelimToken::Paren,
-                    open_span:  DUMMY_SP,
-                    close_span: DUMMY_SP,
                     tts: vec![
                       TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
                       TokenTree::Token(DUMMY_SP, Token::Comma),
@@ -592,8 +584,6 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                   TokenTree::Token(DUMMY_SP, Token::Not),
                   TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
                     delim: DelimToken::Paren,
-                    open_span:  DUMMY_SP,
-                    close_span: DUMMY_SP,
                     tts: {
                       let mut write_args = vec![
                         TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
@@ -757,8 +747,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("Option")),
               parameters: Some(P(PathParameters::AngleBracketed(AngleBracketedParameterData {
                 lifetimes: Vec::new(),
-                types:     P::from_vec(vec![ref_error_ty.clone()]),
-                bindings:  P::new(),
+                types:     vec![ref_error_ty.clone()],
+                bindings:  vec![],
               }))),
             },
           ],
@@ -944,6 +934,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                   }),
                   span: DUMMY_SP,
                   is_shorthand: false,
+                  attrs: ThinVec::new(),
                 }],
                 None,
               ),
@@ -988,8 +979,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                   identifier: ast::Ident::with_empty_ctxt(Symbol::intern("From")),
                   parameters: Some(P(PathParameters::AngleBracketed(AngleBracketedParameterData {
                     lifetimes: Vec::new(),
-                    types:     P::from_vec(vec![field.ty.clone()]),
-                    bindings:  P::new(),
+                    types:     vec![field.ty.clone()],
+                    bindings:  vec![],
                   }))),
                 },
               ],
@@ -1081,6 +1072,7 @@ fn mk_match_block<F>(variants: &Vec<VariantDef>, type_name: ast::Ident, func: F)
                                   ),
                                 }),
                                 is_shorthand: true,
+                                attrs: ThinVec::new(),
                               }))
                             };
                             pat_fields
