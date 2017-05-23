@@ -540,7 +540,9 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               attrs: ThinVec::new(),
             })),
           },
-          Stmt {
+        ];
+        if let Some(ref long_desc) = v.long_description {
+          try_writes.push(Stmt {
             id: DUMMY_NODE_ID,
             span: DUMMY_SP,
             node: StmtKind::Semi(P(Expr {
@@ -569,9 +571,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               })),
               attrs: ThinVec::new(),
             })),
-          }
-        ];
-        if let Some(ref long_desc) = v.long_description {
+          });
           try_writes.push(Stmt {
             id: DUMMY_NODE_ID,
             span: DUMMY_SP,
