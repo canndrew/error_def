@@ -5,8 +5,8 @@ extern crate syntax;
 extern crate rustc;
 extern crate rustc_plugin;
 
-use syntax::codemap::{Span, spanned, DUMMY_SP, dummy_spanned, Spanned};
-use syntax::tokenstream::{TokenTree, Delimited};
+use syntax::codemap::{Span, DUMMY_SP, dummy_spanned, Spanned};
+use syntax::tokenstream::{TokenTree, TokenStream, Delimited};
 use syntax::ext::base::{ExtCtxt, MacResult, DummyResult, SyntaxExtension, MacEager};
 use syntax::parse::token::{Token, Lit, DelimToken};
 use syntax::symbol::{Symbol, keywords};
@@ -27,7 +27,7 @@ use syntax::ext::quote::rt::ToTokens;
 
 use rustc_plugin::Registry;
 
-use std::rc::Rc;
+use std::iter::FromIterator;
 
 struct LongDescription {
   format_str: Name,
@@ -42,7 +42,7 @@ struct VariantDef {
 }
 
 fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, tokens: Vec<TokenTree>) -> Box<MacResult + 'c> {
-  let mut parser = parse::tts_to_parser(cx.parse_sess(), tokens);
+  let mut parser = parse::stream_to_parser(cx.parse_sess(), tokens.into_iter().collect());
 
   let mut items: Vec<P<ast::Item>> = Vec::new();
   let mut variants: Vec<VariantDef> = Vec::new();
@@ -54,139 +54,123 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
    *
    */
   loop {
-    let var_lo = parser.span.lo;
-
     // Get the name of this variant.
-    let variant_name = match parser.bump_and_get() {
-      Token::Eof                             => break,
-      Token::Ident(ident) => ident,
-      _ => {
-        let _ = parser.fatal("Expected variant name");
-        return DummyResult::any(sp);
-      },
+    let variant_name = if parser.check(&Token::Eof) {
+        break
+    } else {
+      match parser.parse_ident() {
+          Ok(ident) => ident,
+          Err(_) => return DummyResult::any(sp),
+      }
     };
-    let var_hi = parser.span.hi;
 
-    let (from_idx, members): (Option<usize>, Vec<StructField>) = match parser.bump_and_get() {
+    let (from_idx, members): (Option<usize>, Vec<StructField>) = if parser.eat(&Token::FatArrow) {
       // It's a unit-like variant. (ie. not a struct variant)
-      Token::FatArrow => (None, Vec::new()),
-
+      (None, Vec::new())
+    } else if parser.eat(&Token::OpenDelim(DelimToken::Brace)) {
       // It's a struct variant
-      Token::OpenDelim(DelimToken::Brace) => {
-        let mut members: Vec<StructField> = Vec::new();
-        let mut from_memb_idx: Option<usize> = None;
+      let mut members: Vec<StructField> = Vec::new();
+      let mut from_memb_idx: Option<usize> = None;
 
-        // Parse the list of struct members.
-        loop {
+      // Parse the list of struct members.
+      loop {
 
-          // Parse the list of attributes on this struct member
-          let mut attrs = match parser.parse_outer_attributes() {
-            Ok(attrs) => attrs,
-            Err(mut e) => {
-              e.emit();
-              return DummyResult::any(sp);
-            },
-          };
-
-          // Find whether this member is marked #[from]. And if it is, find the index of the
-          // #[from] attribute so we can remove it.
-          let mut from_attr_idx: Option<usize> = None;
-          for (i, attr) in attrs.iter().enumerate() {
-            let item = &attr.value;
-            if let MetaItemKind::Word = item.node {
-              if item.name() == "from" {   // We've found a #[from] attribute.
-                match from_attr_idx {
-                  Some(_) => {
-                    let _ = parser.fatal("Field marked #[from] twice");
-                    return DummyResult::any(sp);
-                  },
-                  None => from_attr_idx = Some(i),
-                };
-              };
-            };
-          };
-          match from_attr_idx {
-            // This member is marked #[from]. Record this.
-            Some(i) => {
-              attrs.swap_remove(i);
-              match from_memb_idx {
-                Some(_) => {
-                  let _ = parser.fatal("Multiple fields marked #[from]");
-                  return DummyResult::any(sp);
-                },
-                None  => from_memb_idx = Some(members.len()),
-              };
-            },
-            None    => (),
-          };
-
-          // Parse the name and type of the member.
-          let sf = match parser.parse_single_struct_field(DUMMY_SP.lo,
-                                                          Visibility::Inherited,
-                                                          attrs) {
-            Ok(sf)  => sf,
-            Err(_)  => {
-              let _ = parser.fatal("Expected struct field");
-              return DummyResult::any(sp);
-            },
-          };
-          if sf.ident.is_none() {
-            let _ = parser.fatal("Expected a named field");
-            return DummyResult::any(sp);
-          }
-          members.push(sf);
-          if parser.token == Token::CloseDelim(DelimToken::Brace) {
-            let _ = parser.bump();
-            break;
-          }
-        };
-        
-        match parser.bump_and_get() {
-          Token::FatArrow => (),
-          _ => {
-            let _ = parser.fatal("Expected =>");
+        // Parse the list of attributes on this struct member
+        let mut attrs = match parser.parse_outer_attributes() {
+          Ok(attrs) => attrs,
+          Err(mut e) => {
+            e.emit();
             return DummyResult::any(sp);
           },
         };
 
-        (from_memb_idx, members)
-      },
-      _ => {
-        let _ = parser.fatal("Expected => or struct definition");
+        // Find whether this member is marked #[from]. And if it is, find the index of the
+        // #[from] attribute so we can remove it.
+        let mut from_attr_idx: Option<usize> = None;
+        for (i, attr) in attrs.iter().enumerate() {
+          if attr.path == "from" {
+            match from_attr_idx {
+              Some(_) => {
+                let _ = parser.fatal("Field marked #[from] twice");
+                return DummyResult::any(sp);
+              },
+              None => from_attr_idx = Some(i),
+            };
+          };
+        };
+        match from_attr_idx {
+          // This member is marked #[from]. Record this.
+          Some(i) => {
+            attrs.swap_remove(i);
+            match from_memb_idx {
+              Some(_) => {
+                let _ = parser.fatal("Multiple fields marked #[from]");
+                return DummyResult::any(sp);
+              },
+              None  => from_memb_idx = Some(members.len()),
+            };
+          },
+          None    => (),
+        };
+
+        // Parse the name and type of the member.
+        let sf = match parser.parse_single_struct_field(DUMMY_SP,
+                                                        Visibility::Inherited,
+                                                        attrs) {
+          Ok(sf)  => sf,
+          Err(_)  => {
+            let _ = parser.fatal("Expected struct field");
+            return DummyResult::any(sp);
+          },
+        };
+        if sf.ident.is_none() {
+          let _ = parser.fatal("Expected a named field");
+          return DummyResult::any(sp);
+        }
+        members.push(sf);
+        if parser.token == Token::CloseDelim(DelimToken::Brace) {
+          let _ = parser.bump();
+          break;
+        }
+      };
+      
+      if let Err(_) = parser.expect(&Token::FatArrow) {
         return DummyResult::any(sp);
-      },
+      };
+
+      (from_memb_idx, members)
+    } else {
+      let _ = parser.fatal("Expected => or struct definition");
+      return DummyResult::any(sp);
     };
 
     // Parse the short description.
-    let short_desc = match parser.bump_and_get() {
-      Token::Literal(Lit::Str_(sd), None) => sd,
-      _ => {
-        let _ = parser.fatal("Expected a string literal");
-        return DummyResult::any(sp);
-      },
+    let short_desc = match parser.parse_lit_token() {
+        Ok(LitKind::Str(sd, _)) => sd,
+        _ => {
+          let _ = parser.fatal("Expected a string literal for the short description");
+          return DummyResult::any(sp);
+        },
     };
 
     // Parse the long description if it exists.
     let long_desc = if parser.token == Token::OpenDelim(DelimToken::Paren) {
       let _ = parser.bump();
 
-      let format_str = match parser.bump_and_get() {
-        Token::Literal(Lit::Str_(sd), None) => sd,
+      let format_str = match parser.parse_lit_token() {
+        Ok(LitKind::Str(fs, _)) => fs,
         _ => {
-          let _ = parser.fatal("Expected a format string");
+          let _ = parser.fatal("Expected a string literal for the short description");
           return DummyResult::any(sp);
         },
       };
 
       let mut format_args: Vec<P<Expr>> = Vec::new();
       loop {
-        match parser.bump_and_get() {
-          Token::Comma => (),
-          Token::CloseDelim(DelimToken::Paren) => break,
-          _ => {
-            let _ = parser.fatal("Expected comma");
-            return DummyResult::any(sp);
-          },
+        if parser.eat(&Token::CloseDelim(DelimToken::Paren)) {
+          break
+        } else if let Err(_) = parser.expect(&Token::Comma) {
+          return DummyResult::any(sp);
         };
         let ex = match parser.parse_expr() {
             Ok(ex) => ex,
@@ -213,9 +197,9 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
 
     // Build our variant definition out of the information we've parsed.
     variants.push(VariantDef {
-      variant: P(spanned(var_lo, var_hi, Variant_ {
+      variant: P(dummy_spanned(Variant_ {
         name:      variant_name,
-        attrs:     vec![mk_sugared_doc_attr(mk_attr_id(), comment, var_lo, var_hi)],
+        attrs:     vec![mk_sugared_doc_attr(mk_attr_id(), comment, DUMMY_SP)],
         data:      match members.len() {
           0 => VariantData::Unit(DUMMY_NODE_ID),
           _ => VariantData::Struct(members, DUMMY_NODE_ID),
@@ -227,13 +211,8 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
       long_description: long_desc,
     });
 
-    match parser.bump_and_get() {
-      Token::Comma  => (),
-      Token::Eof    => (),
-      _ => {
-        let _ = parser.fatal("Expected comma");
-        return DummyResult::any(sp);
-      },
+    if let Err(_) = parser.expect_one_of(&[Token::Comma], &[Token::Eof]) {
+      return DummyResult::any(sp);
     }
   };
 
@@ -279,15 +258,12 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
   let unused_attr = Attribute {
     id: mk_attr_id(),
     style: AttrStyle::Outer,
-    value: MetaItem {
-      name: Symbol::intern("allow"),
-      node: MetaItemKind::List(vec![dummy_spanned(NestedMetaItemKind::MetaItem(MetaItem {
-        name: Symbol::intern("unused_variables"),
-        node: MetaItemKind::Word,
-        span: DUMMY_SP,
-      }))]),
+    path: Path::from_ident(DUMMY_SP, ast::Ident::with_empty_ctxt(Symbol::intern("allow"))),
+    tokens: MetaItemKind::List(vec![dummy_spanned(NestedMetaItemKind::MetaItem(MetaItem {
+      name: Symbol::intern("unused_variables"),
+      node: MetaItemKind::Word,
       span: DUMMY_SP,
-    },
+    }))]).tokens(DUMMY_SP),
     is_sugared_doc: false,
     span: DUMMY_SP,
   };
@@ -344,14 +320,17 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
             PathSegment {
               identifier: keywords::CrateRoot.ident(),
               parameters: None,
+              span: DUMMY_SP,
             },
             PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("std")),
               parameters: None,
+              span: DUMMY_SP,
             },
             PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("result")),
               parameters: None,
+              span: DUMMY_SP,
             },
             PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("Result")),
@@ -376,6 +355,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                 ],
                 bindings:  vec![],
               }))),
+              span: DUMMY_SP,
             },
           ],
         }),
@@ -412,28 +392,31 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                 span: DUMMY_SP,
                 node: ExprKind::Mac(dummy_spanned(Mac_ {
                   path: path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
-                  tts:  vec![
-                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
-                    TokenTree::Token(DUMMY_SP, Token::Not),
-                    TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
-                      delim: DelimToken::Paren,
-                      tts: {
-                        let mut tts = vec![
-                          TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
-                          TokenTree::Token(DUMMY_SP, Token::Comma),
-                          TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(Symbol::intern(&ss[..])), None)),
-                        ];
-                        for f in fields.iter() {
+                  tts: {
+                    let tts = vec![
+                      TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
+                      TokenTree::Token(DUMMY_SP, Token::Not),
+                      TokenTree::Delimited(DUMMY_SP, Delimited {
+                        delim: DelimToken::Paren,
+                        tts: {
+                          let mut tts = vec![
+                            TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
+                            TokenTree::Token(DUMMY_SP, Token::Comma),
+                            TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(Symbol::intern(&ss[..])), None)),
+                          ];
+                          for f in fields.iter() {
+                            tts.push(TokenTree::Token(DUMMY_SP, Token::Comma));
+                            let field_name = f.ident.unwrap();
+                            tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(field_name)));
+                          };
                           tts.push(TokenTree::Token(DUMMY_SP, Token::Comma));
-                          let field_name = f.ident.unwrap();
-                          tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(field_name)));
-                        };
-                        tts.push(TokenTree::Token(DUMMY_SP, Token::Comma));
-                        tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(keywords::SelfValue.ident())));
-                        tts
-                      },
-                    })),
-                  ],
+                          tts.push(TokenTree::Token(DUMMY_SP, Token::Ident(keywords::SelfValue.ident())));
+                          TokenStream::from_iter(tts).into()
+                        },
+                      }),
+                    ];
+                    TokenStream::from_iter(tts).into()
+                  },
                 })),
                 attrs: ThinVec::new(),
               })),
@@ -450,20 +433,26 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                 span: DUMMY_SP,
                 node: ExprKind::Mac(dummy_spanned(Mac_ {
                   path: path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
-                  tts: vec![
-                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
-                    TokenTree::Token(DUMMY_SP, Token::Not),
-                    TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
-                      delim: DelimToken::Paren,
-                      tts: vec![
-                        TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
-                        TokenTree::Token(DUMMY_SP, Token::Comma),
-                        TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(Symbol::intern(&ss[..])), None)),
-                        TokenTree::Token(DUMMY_SP, Token::Comma),
-                        TokenTree::Token(DUMMY_SP, Token::Ident(keywords::SelfValue.ident())),
-                      ],
-                    })),
-                  ],
+                  tts: {
+                    let tts = vec![
+                      TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
+                      TokenTree::Token(DUMMY_SP, Token::Not),
+                      TokenTree::Delimited(DUMMY_SP, Delimited {
+                        delim: DelimToken::Paren,
+                        tts: {
+                          let tts = vec![
+                            TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
+                            TokenTree::Token(DUMMY_SP, Token::Comma),
+                            TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(Symbol::intern(&ss[..])), None)),
+                            TokenTree::Token(DUMMY_SP, Token::Comma),
+                            TokenTree::Token(DUMMY_SP, Token::Ident(keywords::SelfValue.ident())),
+                          ];
+                          TokenStream::from_iter(tts).into()
+                        },
+                      }),
+                    ];
+                    TokenStream::from_iter(tts).into()
+                  },
                 })),
                 attrs: ThinVec::new(),
               })),
@@ -529,18 +518,24 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               span: DUMMY_SP,
               node: ExprKind::Mac(dummy_spanned(Mac_ {
                 path: path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
-                tts: vec![
-                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
-                  TokenTree::Token(DUMMY_SP, Token::Not),
-                  TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
-                    delim: DelimToken::Paren,
-                    tts: vec![
-                      TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
-                      TokenTree::Token(DUMMY_SP, Token::Comma),
-                      TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(v.short_description), None)),
-                    ],
-                  })),
-                ],
+                tts: {
+                  let tts = vec![
+                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
+                    TokenTree::Token(DUMMY_SP, Token::Not),
+                    TokenTree::Delimited(DUMMY_SP, Delimited {
+                      delim: DelimToken::Paren,
+                      tts: {
+                        let tts = vec![
+                          TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
+                          TokenTree::Token(DUMMY_SP, Token::Comma),
+                          TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(v.short_description), None)),
+                        ];
+                        TokenStream::from_iter(tts).into()
+                      },
+                    }),
+                  ];
+                  TokenStream::from_iter(tts).into()
+                },
               })),
               attrs: ThinVec::new(),
             })),
@@ -553,18 +548,24 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               span: DUMMY_SP,
               node: ExprKind::Mac(dummy_spanned(Mac_ {
                 path: path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
-                tts: vec![
-                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
-                  TokenTree::Token(DUMMY_SP, Token::Not),
-                  TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
-                    delim: DelimToken::Paren,
-                    tts: vec![
-                      TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
-                      TokenTree::Token(DUMMY_SP, Token::Comma),
-                      TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(Symbol::intern(". ")), None)),
-                    ],
-                  })),
-                ],
+                tts: {
+                  let tts = vec![
+                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
+                    TokenTree::Token(DUMMY_SP, Token::Not),
+                    TokenTree::Delimited(DUMMY_SP, Delimited {
+                      delim: DelimToken::Paren,
+                      tts: {
+                        let tts = vec![
+                          TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
+                          TokenTree::Token(DUMMY_SP, Token::Comma),
+                          TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(Symbol::intern(". ")), None)),
+                        ];
+                        TokenStream::from_iter(tts).into()
+                      },
+                    }),
+                  ];
+                  TokenStream::from_iter(tts).into()
+                },
               })),
               attrs: ThinVec::new(),
             })),
@@ -579,26 +580,29 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
               span: DUMMY_SP,
               node: ExprKind::Mac(dummy_spanned(Mac_ {
                 path: path_from_segments(&[ast::Ident::with_empty_ctxt(Symbol::intern("try"))]),
-                tts: vec![
-                  TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
-                  TokenTree::Token(DUMMY_SP, Token::Not),
-                  TokenTree::Delimited(DUMMY_SP, Rc::new(Delimited {
-                    delim: DelimToken::Paren,
-                    tts: {
-                      let mut write_args = vec![
-                        TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
-                        TokenTree::Token(DUMMY_SP, Token::Comma),
-                        TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(long_desc.format_str), None)),
-                      ];
-                      for fa in long_desc.format_args.iter() {
-                        write_args.push(TokenTree::Token(DUMMY_SP, Token::Comma));
-                        let tt = fa.to_tokens(cx);
-                        write_args.extend(tt);
-                      };
-                      write_args
-                    },
-                  })),
-                ],
+                tts: {
+                  let tts = vec![
+                    TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("write")))),
+                    TokenTree::Token(DUMMY_SP, Token::Not),
+                    TokenTree::Delimited(DUMMY_SP, Delimited {
+                      delim: DelimToken::Paren,
+                      tts: {
+                        let mut write_args = vec![
+                          TokenTree::Token(DUMMY_SP, Token::Ident(ast::Ident::with_empty_ctxt(Symbol::intern("f")))),
+                          TokenTree::Token(DUMMY_SP, Token::Comma),
+                          TokenTree::Token(DUMMY_SP, Token::Literal(Lit::Str_(long_desc.format_str), None)),
+                        ];
+                        for fa in long_desc.format_args.iter() {
+                          write_args.push(TokenTree::Token(DUMMY_SP, Token::Comma));
+                          let tt = fa.to_tokens(cx);
+                          write_args.extend(tt);
+                        };
+                        TokenStream::from_iter(write_args).into()
+                      },
+                    }),
+                  ];
+                  TokenStream::from_iter(tts).into()
+                },
               })),
               attrs: ThinVec::new(),
             })),
@@ -734,14 +738,17 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
             PathSegment {
               identifier: keywords::CrateRoot.ident(),
               parameters: None,
+              span: DUMMY_SP,
             },
             PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("std")),
               parameters: None,
+              span: DUMMY_SP,
             },
             PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("option")),
               parameters: None,
+              span: DUMMY_SP,
             },
             PathSegment {
               identifier: ast::Ident::with_empty_ctxt(Symbol::intern("Option")),
@@ -750,6 +757,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                 types:     vec![ref_error_ty.clone()],
                 bindings:  vec![],
               }))),
+              span: DUMMY_SP,
             },
           ],
         }),
@@ -819,7 +827,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     ident: ast::Ident::with_empty_ctxt(Symbol::intern("whats_this_then")),
     attrs: Vec::new(),
     id:    DUMMY_NODE_ID,
-    node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
+    node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Defaultness::Final, Generics::default(), Some(TraitRef {
       path:   path_from_segments(&[
         keywords::CrateRoot.ident(),
         ast::Ident::with_empty_ctxt(Symbol::intern("std")),
@@ -843,7 +851,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     ident: ast::Ident::with_empty_ctxt(Symbol::intern("whats_this_then")),
     attrs: Vec::new(),
     id:    DUMMY_NODE_ID,
-    node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
+    node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Defaultness::Final, Generics::default(), Some(TraitRef {
       path:   path_from_segments(&[
         keywords::CrateRoot.ident(),
         ast::Ident::with_empty_ctxt(Symbol::intern("std")),
@@ -867,7 +875,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     ident: ast::Ident::with_empty_ctxt(Symbol::intern("seriously_what_should_this_be")),
     attrs: Vec::new(),
     id:    DUMMY_NODE_ID,
-    node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
+    node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Defaultness::Final, Generics::default(), Some(TraitRef {
       path:   path_from_segments(&[
         keywords::CrateRoot.ident(),
         ast::Ident::with_empty_ctxt(Symbol::intern("std")),
@@ -959,21 +967,24 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
           ident: ast::Ident::with_empty_ctxt(Symbol::intern("zoomzoom")),
           attrs: Vec::new(),
           id:    DUMMY_NODE_ID,
-          node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Generics::default(), Some(TraitRef {
+          node:  ItemKind::Impl(Unsafety::Normal, ImplPolarity::Positive, Defaultness::Final, Generics::default(), Some(TraitRef {
             path:   Path {
               span:   DUMMY_SP,
               segments: vec![
                 PathSegment {
                   identifier: keywords::CrateRoot.ident(),
                   parameters: None,
+                  span: DUMMY_SP,
                 },
                 PathSegment {
                   identifier: ast::Ident::with_empty_ctxt(Symbol::intern("std")),
                   parameters: None,
+                  span: DUMMY_SP,
                 },
                 PathSegment {
                   identifier: ast::Ident::with_empty_ctxt(Symbol::intern("convert")),
                   parameters: None,
+                  span: DUMMY_SP,
                 },
                 PathSegment {
                   identifier: ast::Ident::with_empty_ctxt(Symbol::intern("From")),
@@ -982,6 +993,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                     types:     vec![field.ty.clone()],
                     bindings:  vec![],
                   }))),
+                  span: DUMMY_SP,
                 },
               ],
             },
@@ -1017,6 +1029,7 @@ fn path_from_segments(segments: &[ast::Ident]) -> Path {
     segments: segments.iter().map(|i| PathSegment {
       identifier: *i,
       parameters: None,
+      span: DUMMY_SP,
     }).collect(),
   }
 }
