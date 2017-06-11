@@ -91,7 +91,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
           if attr.path == "from" {
             match from_attr_idx {
               Some(_) => {
-                let _ = parser.fatal("Field marked #[from] twice");
+                cx.span_err(attr.span, "Field marked #[from] twice");
                 return DummyResult::any(sp);
               },
               None => from_attr_idx = Some(i),
@@ -104,7 +104,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
             attrs.swap_remove(i);
             match from_memb_idx {
               Some(_) => {
-                let _ = parser.fatal("Multiple fields marked #[from]");
+                cx.span_err(sp, "Multiple fields marked #[from]");
                 return DummyResult::any(sp);
               },
               None  => from_memb_idx = Some(members.len()),
@@ -119,12 +119,12 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
                                                         attrs) {
           Ok(sf)  => sf,
           Err(_)  => {
-            let _ = parser.fatal("Expected struct field");
+            cx.span_err(sp, "Expected struct field");
             return DummyResult::any(sp);
           },
         };
         if sf.ident.is_none() {
-          let _ = parser.fatal("Expected a named field");
+          cx.span_err(sp, "Expected a named field");
           return DummyResult::any(sp);
         }
         members.push(sf);
@@ -140,7 +140,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
 
       (from_memb_idx, members)
     } else {
-      let _ = parser.fatal("Expected => or struct definition");
+      cx.span_err(sp, "Expected => or struct definition");
       return DummyResult::any(sp);
     };
 
@@ -148,7 +148,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
     let short_desc = match parser.parse_lit_token() {
         Ok(LitKind::Str(sd, _)) => sd,
         _ => {
-          let _ = parser.fatal("Expected a string literal for the short description");
+          cx.span_err(sp, "Expected a string literal for the short description");
           return DummyResult::any(sp);
         },
     };
@@ -160,7 +160,7 @@ fn expand_error_def<'c>(cx: &'c mut ExtCtxt, sp: Span, type_name: ast::Ident, to
       let format_str = match parser.parse_lit_token() {
         Ok(LitKind::Str(fs, _)) => fs,
         _ => {
-          let _ = parser.fatal("Expected a string literal for the short description");
+          cx.span_err(sp, "Expected a string literal for the short description");
           return DummyResult::any(sp);
         },
       };
