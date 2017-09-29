@@ -5,19 +5,19 @@
 use std::io;
 
 error_def! ExampleError {
-  AVariant                     => "Unit-like variant",
-  AVariantWithALongDescription => "Unit-like variant" ("A more verbose description"),
-  AVariantWithArgs {
-    flim: u32,
-    flam: u32,
-  }                     => "Variant with args" ("This is a format string. flim is {}. flam is {}.", flim, flam),
-  AVariantWithACause {
-    blah: bool,
-    #[from] cause: io::Error,
-  }                     => "Variant with a cause" ("self.cause() would return Some({})", cause),
-  AVariantWithJustACause {
-    #[from] blah: io::Error,
-  }                     => "This variant can be made `From` an `io::Error`"
+    AVariant                     => "Unit-like variant",
+    AVariantWithALongDescription => "Unit-like variant" ("A more verbose description"),
+    AVariantWithArgs {
+        flim: u32,
+        flam: u32,
+    } => "Variant with args" ("This is a format string. flim is {}. flam is {}.", flim, flam),
+    AVariantWithACause {
+        blah: bool,
+        #[from] cause: io::Error,
+    } => "Variant with a cause" ("self.cause() would return Some({})", cause),
+    AVariantWithJustACause {
+        #[from] blah: io::Error,
+    } => "This variant can be made `From` an `io::Error`"
 }
 
 /* Expands (roughly) to
