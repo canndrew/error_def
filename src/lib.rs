@@ -353,7 +353,9 @@ fn expand_error_def<'c>(
         let print_short = quote_stmt!(cx, write!(f, $short)?;); 
         let mut body = quote_tokens!(cx, $print_short);
         if let Some(LongDescription { ref format_str, ref format_args }) = *long_description {
-            let long = dummy_spanned(ast::LitKind::Str(format_str.clone(), ast::StrStyle::Cooked));
+            let long_fmt = format!(". {}", format_str);
+            let long_fmt = Symbol::intern(&long_fmt[..]);
+            let long = dummy_spanned(ast::LitKind::Str(long_fmt, ast::StrStyle::Cooked));
             let mut args = Vec::new();
             for arg in format_args {
                 args.extend(quote_tokens!(cx, $arg,));
