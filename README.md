@@ -1,6 +1,11 @@
 
 ## error_def: A Rust syntax extension for generating error-handling boilerplate code.
 
+**Note: This library is deprecated. It's too much effort to keep it up-to-date
+with the upstream changes to libsyntax and there are better alternatives out
+there now which also run on stable. Personally, I've switched to using
+`failure`.**
+
 **Quick Example:** The following code:
 
 ```rust
